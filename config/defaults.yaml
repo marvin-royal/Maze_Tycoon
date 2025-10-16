@@ -1,0 +1,15 @@
+seed: 1337
+grid:
+  width: 50
+  height: 50
+  connectivity: 4   # or 8
+generation:
+  algo: dfs_backtracker  # or prims
+search:
+  algo: a_star
+  heuristic: manhattan   # euclidean|octile
+  bidirectional: false
+runs: 10                 # repeats per condition
+logging:
+  results_csv: data/results/runs.csv
+  trace: false           # true to store step-by-step for animation

@@ -1,0 +1,11 @@
+extends: ../default.yaml
+grid:
+  width: 50
+  height: 50
+search:
+  algo: a_star
+  variants:
+    - {heuristic: manhattan}
+    - {heuristic: euclidean}
+    - {heuristic: octile}
+runs: 30

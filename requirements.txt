@@ -1,0 +1,8 @@
+pygame
+numpy
+matplotlib
+pandas
+pydantic
+PyYAML
+networkx
+click
