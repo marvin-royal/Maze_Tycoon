@@ -1,0 +1,14 @@
+1. core/grid.py, generation/dfs_backtracker.py, generation/prims.py
+
+2. search/a_star.py + search/heuristics.py (then BFS/Dijkstra)
+
+3. core/metrics.py + io/logging.py
+
+4. scripts/run_experiment.py → produce your first runs.csv
+
+5. analysis/plotting.py + scripts/plot_results.py → figures for report
+
+(Continuous) game/ui_pygame.py + game/app.py → visualize a single run (then add coins/upgrades)
+
+ASCII Preview --> python scripts\run_experiment.py --config config\experiments\size_sweep.yaml --ascii
+Simple Metrics Test --> python scripts\run_experiment.py --config config\experiments\size_sweep.yaml

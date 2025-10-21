@@ -1,0 +1,16 @@
+experiment: size_sweep
+seed: 42
+trials: 5
+
+maze:
+  generator: dfs_backtracker   # or: prim
+  sizes: [[20, 20], [50, 50], [100, 100]]
+
+search:
+  algorithm: bfs               # later: a_star, dijkstra, bidirectional_a_star
+  heuristic: manhattan         # used only if algorithm == a_star
+
+output:
+  dir: data/results
+  tag: midterm
+  ascii_preview: first_trial_per_size
