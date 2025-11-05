@@ -1,0 +1,19 @@
+experiment: prelim
+seed: 42
+trials: 2
+
+output:
+  dir: outputs
+  tag: astar-octile
+
+maze:
+  generator: prim
+  sizes:
+    - [21, 21]
+    - [31, 31]
+    - [41, 41]
+
+search:
+  algorithm: a_star
+  heuristic: octile
+  connectivity: 8

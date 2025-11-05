@@ -35,69 +35,90 @@ The project bridges **AI education** and **game design**, transforming pathfindi
 
 ## ✅ Completed to Date
 
-- Implemented **Grid** and **Cell** core classes  
-- Added **DFS Backtracker** and **Prim’s Algorithm** for procedural maze generation  
-- Verified **matrix translation** logic and correctness of connectivity  
-- Developed **experiment runner (`scripts/run_experiment.py`)** with YAML config support  
-- Implemented **ASCII renderer (`core/vis.py`)** for readable maze visualization in console  
-- Integrated **CLI flags** for real-time ASCII printing and reproducible experiment output  
-- Established **deterministic RNG seeding** for experiment reproducibility  
-- Configured **project structure** (`src/` layout), **GitHub workspace**, and **virtual environment**
+### **Algorithms**
+- ✅ **BFS** implemented (`algorithms/bfs.py`)  
+- ✅ **A\*** implemented with heuristic interface (`algorithms/a_star.py`)  
+- ✅ **Heuristics**: Manhattan, Euclidean, and Octile completed (`heuristics/*.py`)
+
+### **Maze Generation**
+- ✅ **DFS Backtracker** implemented (`generation/dfs_backtracker.py`)  
+- ✅ **Prim’s Algorithm** implemented (`generation/prim.py`)
+
+### **Core Systems**
+- ✅ **Grid / Cell architecture** completed (`core/grid.py`)  
+- ✅ **ASCII Renderer** implemented (`core/vis.py`)  
+- ✅ **YAML Config Loader** implemented (`io/config_loader.py`)
+
+### **Structure**
+- ✅ Clean modular package: `algorithms/`, `core/`, `generation/`, `heuristics/`, `game/`, `io/`, `metrics/`
+
+---
+
+## ⏳ In Progress / Not Yet Implemented
+
+| Module | Status | Description |
+|:--------|:-------:|:------------|
+| `algorithms/dijkstra.py` | ⛔ | Empty — needs priority queue and distance tracking |
+| `algorithms/bidirectional_a_star.py` | ⛔ | Empty — needs dual-frontier meeting logic |
+| `algorithms/interfaces.py` | ⚠️ | Present, incomplete — standardize solver interface |
+| `core/maze.py` | ⛔ | Empty — should handle grid setup, start/goal placement |
+| `core/rng.py` | ⛔ | Empty — deterministic RNG utilities missing |
+| `core/metrics.py` | ⛔ | Empty — needs dataclass + runtime tracking |
+| `game/app.py` | ⛔ | Empty — implement main Pygame loop |
+| `game/ui_pygame.py` | ⛔ | Empty — implement UI controls (start/pause, dropdowns) |
+| `game/economy.py` | ⛔ | Empty — design coin/upgrade economy |
+| `game/pallete.py` | ⚠️ | Empty & misspelled — should be `palette.py` |
+| `io/logging.py` | ⛔ | Empty — build CSV / console logging system |
+| `io/serialize.py` | ⛔ | Empty — add save/load for maze and results |
+| `metrics/aggregations.py` | ⛔ | Empty — build CSV aggregation functions |
+| `metrics/plotting.py` | ⛔ | Empty — implement runtime / expansion graphs |
+
+**Missing project files:**
+- `README.md`
+- `requirements.txt`
+- `scripts/run_experiment.py`
+- `tests/` directory for algorithm verification
 
 ---
 
 ## 🔧 Next Immediate Tasks
 
-1. Integrate **A\*** and baseline algorithms (BFS, Dijkstra) into experiment runner  
-2. Connect the **metrics** module to record node expansions, runtime, and path length  
-3. Expand YAML experiment schema for heuristic selection and maze variety  
-4. Implement **economy loop** (coin cost per node, reward per solution)  
-5. Add **Pygame visualization layer** for interactive maze solving and progress display  
-6. Finalize **unit tests** for reproducibility and performance validation  
+1. **Complete Algorithm Set**
+   - Implement Dijkstra and Bidirectional A\*
+   - Finalize interface to unify solver APIs for visualization
+
+2. **Maze & RNG Integration**
+   - Build `core/maze.py` to combine generation, seeding, and solver launching
+   - Add seeded random generator via `core/rng.py`
+
+3. **Metrics & Experiment Logging**
+   - Add `core/metrics.py` dataclass (`nodes_expanded`, `runtime`, `path_length`)
+   - Write CSV logger (`io/logging.py`) and serializer (`io/serialize.py`)
+
+4. **Visualization Layer**
+   - Implement `game/app.py` for Pygame-based display
+   - Add controls (`ui_pygame.py`) and color palette
+
+5. **Economy System**
+   - Implement upgrade loop: cost per node, reward per efficiency
+   - Add persistence of coins across runs
+
+6. **Analytics & Documentation**
+   - Fill `metrics/plotting.py` and `metrics/aggregations.py`
+   - Add plots comparing A*, BFS, Dijkstra
+   - Write README and setup instructions
 
 ---
 
 ## 🧠 Testing & Visualization Framework
 
-Maze Tycoon now includes a repeatable experiment system:
+The project scaffolding supports **reproducible experiments**:
 
-- **Config-Driven Execution** — YAML files in `config/experiments/` define parameters like maze size, algorithm, and trials.  
-- **State Reset** — Each trial resets RNG seed, grid state, and logs to guarantee reproducibility.  
-- **Logging** — Results are saved as timestamped CSVs in `data/results/`.  
-- **Visualization** — The `render_ascii()` utility provides clear console output for visual debugging and qualitative analysis.  
+- **Config-Driven Execution** via `io/config_loader.py`
+- **Deterministic Seeding** (pending `core/rng.py`)
+- **Metrics Logging** (pending `core/metrics.py` + `io/logging.py`)
+- **Visualization** already functional in console via `core/vis.py`; next step is real-time rendering in Pygame
 
-Example command:
+**Example (target) command:**
 ```bash
 python scripts/run_experiment.py --config config/experiments/size_sweep.yaml --ascii
-
-📈 Long-Term Goals (Post-MVP)
-
-Integrate Bidirectional A* and heuristic upgrades into gameplay loop
-
-Add reinforcement learning agent to adapt heuristic choice based on prior performance
-
-Extend to 3D maze generation and multi-floor pathfinding
-
-Build an analytics dashboard with real-time graphs of node expansions and runtime
-
-Package Maze Tycoon as an interactive AI education toolkit
-
-🗂 Directory Highlights
-src/
-└── maze_tycoon/
-    ├── core/
-    │   ├── grid.py          # Maze and cell data structures
-    │   ├── vis.py           # ASCII rendering for debugging and analysis
-    │   └── __init__.py
-    ├── generation/
-    │   ├── dfs_backtracker.py
-    │   ├── prim.py
-    │   └── __init__.py
-    ├── algorithms/          # BFS, A*, Dijkstra implementations (in progress)
-    ├── game/                # Pygame visualization and UI
-    └── metrics/             # Logging and analytics utilities
-
-🧾 Summary
-
-Maze Tycoon has established the foundation for reproducible AI experimentation through procedural maze generation, deterministic seeding, and visualization tools.
-The next milestone will transition from infrastructure to algorithmic integration and visual gameplay, demonstrating how heuristic design impacts efficiency, cost, and player progression.

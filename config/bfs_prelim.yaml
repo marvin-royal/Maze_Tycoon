@@ -1,0 +1,17 @@
+experiment: prelim
+seed: 42
+trials: 2
+
+output:
+  dir: outputs
+  tag: bfs
+
+maze:
+  generator: dfs_backtracker   # or prim
+  sizes:
+    - [21, 21]
+    - [31, 31]
+    - [41, 41]
+
+search:
+  algorithm: bfs

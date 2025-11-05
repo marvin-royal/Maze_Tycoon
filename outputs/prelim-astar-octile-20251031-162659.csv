@@ -1,0 +1,7 @@
+trial,width,height,seed,generator,algorithm,heuristic,path_length,node_expansions,runtime_ms
+0,21,21,21063,prim,a_star,octile,68,627,1.7618999991100281
+1,21,21,21064,prim,a_star,octile,67,324,1.3577000063378364
+0,31,31,31073,prim,a_star,octile,101,1145,4.047399997944012
+1,31,31,31074,prim,a_star,octile,92,799,1.881200005300343
+0,41,41,41083,prim,a_star,octile,157,1161,3.2645000028423965
+1,41,41,41084,prim,a_star,octile,130,897,2.123399986885488

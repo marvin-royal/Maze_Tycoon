@@ -1,0 +1,10 @@
+generator,size,algorithm,heuristic,avg_expansions,avg_runtime_ms,avg_path_len,n
+dfs_backtracker,21x21,a_star,manhattan,591,0.77,334,2
+dfs_backtracker,21x21,bfs,-,591,0.51,334,2
+dfs_backtracker,31x31,a_star,manhattan,1106,2.03,540,2
+dfs_backtracker,31x31,bfs,-,1249,1.67,540,2
+dfs_backtracker,41x41,a_star,manhattan,3186,4.33,1252,2
+dfs_backtracker,41x41,bfs,-,3257,2.36,1252,2
+prim,21x21,a_star,octile,475,1.56,67,2
+prim,31x31,a_star,octile,972,2.96,96,2
+prim,41x41,a_star,octile,1029,2.69,143,2

@@ -1,0 +1,7 @@
+trial,width,height,seed,generator,algorithm,heuristic,path_length,node_expansions,runtime_ms
+0,21,21,21063,dfs_backtracker,bfs,,252,436,0.38740001036785543
+1,21,21,21064,dfs_backtracker,bfs,,416,747,0.6281000096350908
+0,31,31,31073,dfs_backtracker,bfs,,612,1054,0.7233000069390982
+1,31,31,31074,dfs_backtracker,bfs,,468,1445,2.6135000225622207
+0,41,41,41083,dfs_backtracker,bfs,,1028,3311,2.435200003674254
+1,41,41,41084,dfs_backtracker,bfs,,1476,3204,2.289199997903779

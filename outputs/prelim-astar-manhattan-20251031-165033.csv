@@ -1,0 +1,7 @@
+trial,width,height,seed,generator,algorithm,heuristic,path_length,node_expansions,runtime_ms
+0,21,21,21063,dfs_backtracker,a_star,manhattan,252,435,0.6429000059142709
+1,21,21,21064,dfs_backtracker,a_star,manhattan,416,747,0.898600002983585
+0,31,31,31073,dfs_backtracker,a_star,manhattan,612,1045,1.2604999938048422
+1,31,31,31074,dfs_backtracker,a_star,manhattan,468,1167,2.8064000071026385
+0,41,41,41083,dfs_backtracker,a_star,manhattan,1028,3193,4.711200017482042
+1,41,41,41084,dfs_backtracker,a_star,manhattan,1476,3179,3.9473000215366483
