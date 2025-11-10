@@ -1,3 +1,67 @@
 Metadata-Version: 2.4
 Name: maze_tycoon
-Version: 0.0.0
+Version: 0.1.0
+Summary: Maze generation, solving, and visualization toolkit
+Author-email: Marvin Royal <marvin@example.com>
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: pygame>=2.5
+
+Notes to self - Relevant Commands
+
+🧩 Project Setup / Imports
+# 1️⃣  Set Python path so the src/ folder is visible to imports
+$env:PYTHONPATH = "src"
+
+# 2️⃣  Test that imports work
+python -c "import maze_tycoon, sys; print('OK:', maze_tycoon.__file__)"
+
+🧱 Running Maze Generators
+# 3️⃣  Run the ASCII maze visualizer
+python scripts\show_mazes.py
+
+# 4️⃣  (Optional) run as module if you prefer
+python -m scripts.show_mazes
+
+🧠 Running Experiments (CSV + Pathfinding)
+# 5️⃣  BFS baseline run with ASCII output for first maze of each size
+python scripts\run_experiment.py -c configs\bfs.yml --ascii
+
+# 6️⃣  A* Manhattan heuristic (4-connected)
+python scripts\run_experiment.py -c configs\astar_manhattan.yml
+
+# 7️⃣  A* Octile heuristic (8-connected)
+python scripts\run_experiment.py -c configs\astar_octile.yml
+
+📦 Check Algorithm Modules Exist
+# 8️⃣  Confirm that bfs and a_star modules load and have solve()
+$env:PYTHONPATH = "src"
+python -c "import importlib; print('bfs:', hasattr(importlib.import_module('maze_tycoon.algorithms.bfs'),'solve')); print('a_star:', hasattr(importlib.import_module('maze_tycoon.algorithms.a_star'),'solve'))"
+
+🔍 Debugging Imports or Seeds
+# 10️⃣  Find any hardcoded random seeds (e.g., "random.Random(42)")
+findstr /S /N /I "random.Random(" src\maze_tycoon\generation\*.py
+findstr /S /N /I "np.random.seed" src\maze_tycoon\generation\*.py
+
+🗂️ Confirm File Structure (Top 3 Levels)
+# 11️⃣  Show layout to verify src and scripts folders
+tree -a -L 3
+
+🧼 Reset / Re-run Environment
+# 12️⃣  Clear and recreate outputs folder if needed
+Remove-Item outputs -Recurse -Force
+mkdir outputs
+
+Run Python test suite quickly
+python -m pytest -q
+
+Erase previous coverage file
+python -m coverage erase
+
+Run Coverage report, skip completely covered features, and generate an html report
+python -m pytest -vv --cov=maze_tycoon --cov-report=term-missing:skip-covered --cov-report=html

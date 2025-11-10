@@ -4,6 +4,8 @@ src/maze_tycoon/__init__.py
 src/maze_tycoon.egg-info/PKG-INFO
 src/maze_tycoon.egg-info/SOURCES.txt
 src/maze_tycoon.egg-info/dependency_links.txt
+src/maze_tycoon.egg-info/entry_points.txt
+src/maze_tycoon.egg-info/requires.txt
 src/maze_tycoon.egg-info/top_level.txt
 src/maze_tycoon/algorithms/__init__.py
 src/maze_tycoon/algorithms/a_star.py
@@ -34,6 +36,10 @@ src/maze_tycoon/io/serialize.py
 src/maze_tycoon/metrics/aggregations.py
 src/maze_tycoon/metrics/plotting.py
 tests/test_a_star.py
+tests/test_app.py
+tests/test_bfs.py
+tests/test_bidirectional_a_star.py
+tests/test_dijkstra.py
 tests/test_generation.py
 tests/test_grid.py
 tests/test_interfaces.py

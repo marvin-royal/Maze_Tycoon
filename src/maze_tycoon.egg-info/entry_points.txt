@@ -1,0 +1,2 @@
+[console_scripts]
+maze-tycoon-exp = maze_tycoon.game.app:main

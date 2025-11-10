@@ -51,3 +51,6 @@ python -m coverage erase
 
 Run Coverage report, skip completely covered features, and generate an html report
 python -m pytest -vv --cov=maze_tycoon --cov-report=term-missing:skip-covered --cov-report=html
+
+Print help text for maze_tycoon
+python -m maze_tycoon.game.app --help
