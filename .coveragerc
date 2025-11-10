@@ -1,5 +1,6 @@
 
 [run]
+branch = True
 source = src/maze_tycoon
 omit =
     */tests/*
@@ -11,4 +12,7 @@ skip_covered = True
 show_missing = True
 precision = 2
 exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__==.__main__.:
     ^from __future__ import

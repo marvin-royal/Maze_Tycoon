@@ -29,35 +29,6 @@ python scripts\run_experiment.py -c configs\astar_octile.yml
 $env:PYTHONPATH = "src"
 python -c "import importlib; print('bfs:', hasattr(importlib.import_module('maze_tycoon.algorithms.bfs'),'solve')); print('a_star:', hasattr(importlib.import_module('maze_tycoon.algorithms.a_star'),'solve'))"
 
-🧮 Aggregate Results (Heuristic Scaling Summary)
-# 9️⃣  Quick summary table across all CSVs
-$env:PYTHONPATH="src"
-python - << 'PY'
-import glob, csv, statistics as st
-rows=[]
-for fp in glob.glob("outputs/*.csv"):
-    with open(fp, newline='', encoding='utf-8') as f:
-        for r in csv.DictReader(f):
-            r['width']=int(r['width']); r['height']=int(r['height'])
-            r['node_expansions']=int(float(r['node_expansions']))
-            r['runtime_ms']=float(r['runtime_ms'])
-            r['path_length']=int(float(r['path_length']))
-            rows.append(r)
-
-from collections import defaultdict
-g=defaultdict(list)
-for r in rows:
-    key=(r['generator'], f"{r['width']}x{r['height']}", r['algorithm'], r['heuristic'] or "-")
-    g[key].append(r)
-
-print("generator,size,algorithm,heuristic,avg_expansions,avg_runtime_ms,avg_path_len,n")
-for k, grp in sorted(g.items()):
-    ae=st.mean(r['node_expansions'] for r in grp)
-    ar=st.mean(r['runtime_ms'] for r in grp)
-    ap=st.mean(r['path_length'] for r in grp)
-    print(",".join(map(str, [*k, int(ae), f'{ar:.2f}', int(ap), len(grp)])))
-PY
-
 🔍 Debugging Imports or Seeds
 # 10️⃣  Find any hardcoded random seeds (e.g., "random.Random(42)")
 findstr /S /N /I "random.Random(" src\maze_tycoon\generation\*.py
@@ -71,3 +42,12 @@ tree -a -L 3
 # 12️⃣  Clear and recreate outputs folder if needed
 Remove-Item outputs -Recurse -Force
 mkdir outputs
+
+Run Python test suite quickly
+python -m pytest -q
+
+Erase previous coverage file
+python -m coverage erase
+
+Run Coverage report, skip completely covered features, and generate an html report
+python -m pytest -vv --cov=maze_tycoon --cov-report=term-missing:skip-covered --cov-report=html

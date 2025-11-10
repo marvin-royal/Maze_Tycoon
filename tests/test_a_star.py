@@ -1,7 +1,7 @@
 import math
 from importlib import import_module
 
-A_STAR = "src.maze_tycoon.algorithms.a_star"
+A_STAR = "maze_tycoon.algorithms.a_star"
 
 def empty_maze(h=7, w=7):
     """

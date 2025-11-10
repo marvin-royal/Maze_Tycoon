@@ -5,6 +5,10 @@ import inspect
 from importlib import import_module
 from maze_tycoon.core.grid import Grid
 
+def _box(h, w, fill=0):
+    # 1 = wall border, 0 = open interior
+    return [[1]*w] + [[1] + [fill]*(w-2) + [1] for _ in range(h-2)] + [[1]*w]
+
 def test_ascii_snapshot_simple():
     # 5x5 empty interior matrix (1 = wall, 0 = open)
     m = [[1]*5] + [[1,0,0,0,1] for _ in range(3)] + [[1]*5]
@@ -146,3 +150,98 @@ def test_print_wrapper_calls_print_and_renders(capsys):
     fn(g, start=(1, 1), goal=(3, 5))  # this should execute the print(render_ascii(...)) path
     out = capsys.readouterr().out
     assert len(out) > 0   # some ASCII was printed
+
+def _render(grid, path=None, start=None, goal=None):
+    # Flexible wrapper in case the signature is (grid, path, start, goal) vs keywords
+    try:
+        return render_ascii(grid, path=path, start=start, goal=goal)
+    except TypeError:
+        try:
+            return render_ascii(grid, path, start, goal)
+        except TypeError:
+            return render_ascii(grid)
+
+def _buf(s):
+    return [list(row) for row in s.splitlines()]
+
+def test_vis_draws_path_and_between_cell():
+    g = Grid(7, 7)  # small, square, walls around edges
+    # Segment (1,1) -> (3,1) creates a midpoint (2,1) that should be filled by the "between" logic
+    path = [(1, 1), (3, 1)]
+    out = _render(g, path=path)
+    buf = _buf(out)
+    # y first then x: (x,y) -> buf[y][x]
+    path_ch = buf[1][1]
+    mid_ch = buf[1][2]
+    # Midpoint should be drawn and match the path glyph
+    assert mid_ch == path_ch and mid_ch != buf[1][0]
+
+def test_vis_between_cell_does_not_overwrite_start_or_goal():
+    g = Grid(7, 7)
+    # Two segments to create two midpoints: (2,1) and (3,2)
+    # We'll place START at (2,1) and GOAL at (3,2) so the midpoint logic must skip overwriting them.
+    path = [(1, 1), (3, 1), (3, 3)]
+    start = (2, 1)  # midpoint of first segment
+    goal = (3, 2)   # midpoint of second segment
+
+    out = _render(g, path=path, start=start, goal=goal)
+    buf = _buf(out)
+
+    path_ch = buf[1][1]        # a drawn path cell
+    start_ch = buf[start[1]][start[0]]
+    goal_ch  = buf[goal[1]][goal[0]]
+
+    # Start and goal cells must remain distinct from path glyph (not overwritten by midpoints)
+    assert start_ch != path_ch
+    assert goal_ch  != path_ch
+
+def test_vis_ignores_out_of_bounds_points():
+    g = Grid(5, 6)
+    # Include a couple of wildly OOB points plus one valid point
+    path = [(-10, -10), (1, 1), (999, 999)]
+    out = _render(g, path=path)
+    buf = _buf(out)
+
+    # Valid path cell (1,1) should be drawn
+    path_ch = buf[1][1]
+    # A background cell far away should differ
+    background = buf[2][2]
+    assert path_ch != background
+
+    # And, most importantly, rendering with OOB points should not crash
+    assert isinstance(out, str) and len(out) > 0
+
+def test_vis_draws_path_and_between_cell():
+    mat = _box(7, 7)
+    # Segment (1,1)->(3,1) → midpoint (2,1) should be drawn by "between" logic
+    path = [(1, 1), (3, 1)]
+    out = render_ascii(mat, path=path)
+    buf = _buf(out)
+    path_ch = buf[1][1]
+    mid_ch = buf[1][2]
+    assert mid_ch == path_ch and mid_ch != buf[1][0]
+
+def test_vis_between_cell_does_not_overwrite_start_or_goal():
+    mat = _box(7, 7)
+    # Two segments -> midpoints at (2,1) and (3,2); place S/G there so midpoint logic must skip them
+    path = [(1, 1), (3, 1), (3, 3)]
+    start = (2, 1)
+    goal = (3, 2)
+    out = render_ascii(mat, path=path, start=start, goal=goal)
+    buf = _buf(out)
+    path_ch = buf[1][1]
+    start_ch = buf[start[1]][start[0]]
+    goal_ch  = buf[goal[1]][goal[0]]
+    assert start_ch != path_ch
+    assert goal_ch  != path_ch
+
+def test_vis_ignores_out_of_bounds_points():
+    mat = _box(5, 6)
+    # Include wildly OOB points plus a valid one
+    path = [(-10, -10), (1, 1), (999, 999)]
+    out = render_ascii(mat, path=path)
+    buf = _buf(out)
+    path_ch = buf[1][1]
+    background = buf[2][2]
+    assert path_ch != background
+    assert isinstance(out, str) and len(out) > 0

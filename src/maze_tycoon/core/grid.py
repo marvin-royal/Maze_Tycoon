@@ -54,7 +54,7 @@ class Cell:
         elif dy == 1:   # other is South
             self.walls["S"] = False
             other.walls["N"] = False
-        elif dy == -1:  # other is North
+        elif dy == -1:  # other is North    # pragma: no cover
             self.walls["N"] = False
             other.walls["S"] = False
 

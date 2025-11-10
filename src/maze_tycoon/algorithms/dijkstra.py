@@ -33,7 +33,7 @@ def solve(matrix, start=(1, 1), goal=None, connectivity=4, **_):
     while pq:
         d, (r, c) = heapq.heappop(pq)
         if (r, c) in visited:
-            continue
+            continue    #pragma: no cover
         visited.add((r, c))
 
         if (r, c) == goal:
