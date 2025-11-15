@@ -1,0 +1,2 @@
+{"trial": 0, "width": 11, "height": 11, "seed": 11011, "generator": "dfs_backtracker", "algorithm": "bfs", "heuristic": null, "path_length": 132, "node_expansions": 232, "runtime_ms": 0.17739998293109238}
+{"trial": 1, "width": 11, "height": 11, "seed": 11012, "generator": "dfs_backtracker", "algorithm": "bfs", "heuristic": null, "path_length": 84, "node_expansions": 137, "runtime_ms": 0.09180000051856041}

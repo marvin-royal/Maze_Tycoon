@@ -1,0 +1,3 @@
+algorithm,generator,height,heuristic,node_expansions,path_length,runtime_ms,seed,trial,width
+bfs,dfs_backtracker,11,,232,132,0.17739998293109238,11011,0,11
+bfs,dfs_backtracker,11,,137,84,0.09180000051856041,11012,1,11

@@ -8,6 +8,7 @@ from maze_tycoon.core.metrics import InMemoryMetricsSink  # optional dependency
 # Generators (add more as you implement them)
 from maze_tycoon.generation.dfs_backtracker import generate as gen_dfs
 from maze_tycoon.generation.prim import generate as gen_prim
+from maze_tycoon.io.serialize import write_csv, write_jsonl, append_jsonl
 
 # Simple registry (generator name -> function(Grid) -> None)
 GEN_MAP: Dict[str, Callable[[Grid], None]] = {
@@ -139,23 +140,78 @@ def run_trials(
 
 
 if __name__ == "__main__":
-    # Tiny CLI for manual smoke tests:
-    import json, argparse
+    import json, argparse, os
     p = argparse.ArgumentParser()
     p.add_argument("--gen", default="dfs_backtracker", choices=list(GEN_MAP.keys()))
     p.add_argument("--alg", default="bfs")
     p.add_argument("--heuristic", default=None)
     p.add_argument("--connectivity", type=int, default=4, choices=[4, 8])
+
     p.add_argument("--width", type=int, default=21)
     p.add_argument("--height", type=int, default=21)
     p.add_argument("--trials", type=int, default=1)
     p.add_argument("--seed", type=int, default=0)
+
+    # ASCII preview
+    p.add_argument("--ascii", action="store_true", help="Print ASCII maze for the first trial")
+    p.add_argument("--ascii-all", action="store_true", help="Print ASCII maze for every trial")
+
+    # NEW: outputs
+    p.add_argument("--csv", type=str, default=None, help="Write rows to CSV at this path")
+    p.add_argument("--jsonl", type=str, default=None, help="Write rows to JSONL at this path")
+    p.add_argument("--append", action="store_true", help="Append to CSV/JSONL if they already exist")
+
     args = p.parse_args()
 
     cfg = {
         "maze": {"generator": args.gen},
         "search": {"algorithm": args.alg, "heuristic": args.heuristic, "connectivity": args.connectivity},
     }
+
+    # Run trials
+    from maze_tycoon.core.metrics import InMemoryMetricsSink
     sink = InMemoryMetricsSink()
-    rows = run_trials(cfg, width=args.width, height=args.height, trials=args.trials, base_seed=args.seed, sink=sink)
-    print(json.dumps({"rows": rows, "avg": sink.aggregate()}, indent=2))
+    rows = run_trials(
+        cfg,
+        width=args.width,
+        height=args.height,
+        trials=args.trials,
+        base_seed=args.seed,
+        sink=sink,
+        return_last_matrix=args.ascii or args.ascii_all,
+    )
+
+    # Unpack matrix if requested for ASCII display
+    last_matrix = None
+    if isinstance(rows, tuple):
+        rows, last_matrix = rows  # rows: list[dict], last_matrix: list[list[int]]
+
+    # ASCII printing
+    if args.ascii or args.ascii_all:
+        from maze_tycoon.core.vis import render_ascii
+        for i, row in enumerate(rows):
+            if args.ascii and i > 0:
+                break
+            print(f"\n=== {row['width']}x{row['height']} trial {row['trial']} seed={row['seed']} "
+                  f"gen={row['generator']} alg={row['algorithm']} ===")
+            # Use last_matrix for the last trial; otherwise re-run minimal render per trial if needed.
+            # For simplicity here, show the last captured matrix if present:
+            if last_matrix is not None:
+                print(render_ascii(last_matrix))
+
+    # NEW: outputs
+    if args.csv:
+        write_csv(rows, args.csv, append=args.append)
+        print(f"[csv] wrote {len(rows)} row(s) to {os.path.abspath(args.csv)}" + (" (append)" if args.append else ""))
+
+    if args.jsonl:
+        if args.append:
+            append_jsonl(rows, args.jsonl)
+        else:
+            write_jsonl(rows, args.jsonl)
+        print(f"[jsonl] wrote {len(rows)} row(s) to {os.path.abspath(args.jsonl)}" + (" (append)" if args.append else ""))
+
+    # Quick summary
+    avg = sink.aggregate()
+    if avg:
+        print(json.dumps({"avg": avg}, indent=2))
