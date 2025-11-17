@@ -4,8 +4,9 @@ Adapters that bridge Maze Tycoon's internal world to the pygame UI.
 These helpers make it easy to take a sequence of maze / solver states and
 view them using `run_maze_view` from `game.ui_pygame`.
 """
-
 from __future__ import annotations
+
+import random
 
 from typing import (
     Collection,
@@ -15,7 +16,7 @@ from typing import (
     Sequence,
     Tuple,
     List,
-    Set
+    Set,
 )
 
 from collections import deque
@@ -28,6 +29,36 @@ from .ui_pygame import MazeFrame, run_maze_view
 Pos = Tuple[int, int]
 GridLike = Sequence[Sequence[int]]  # or bool; we normalize below
 
+def _fit_cell_size_to_window(
+    rows: int,
+    cols: int,
+    *,
+    base_cell_size: int,
+    hud_height: int,
+    max_width: Optional[int],
+    max_height: Optional[int],
+) -> int:
+    """
+    Given maze dimensions and a desired base cell_size, shrink cell_size
+    if needed so that the window (grid + HUD) fits within max_width/height.
+    """
+    cell_size = base_cell_size
+
+    width = cols * cell_size
+    height = rows * cell_size + hud_height
+
+    scale = 1.0
+
+    if max_width is not None and width > max_width:
+        scale = min(scale, max_width / width)
+
+    if max_height is not None and height > max_height:
+        scale = min(scale, max_height / height)
+
+    if scale < 1.0:
+        cell_size = max(1, int(cell_size * scale))
+
+    return cell_size
 
 def iter_frames_from_grids(
     grids: Sequence[Sequence[Sequence[int] | bool]],
@@ -248,6 +279,97 @@ def frames_from_matrix_with_path(
             note=final_note,
         )
 
+def _distance_map_from_goal(
+    matrix: Sequence[Sequence[int]],
+    goal: Pos,
+    connectivity: int = 4,
+) -> list[list[Optional[int]]]:
+    """
+    BFS from the goal to compute shortest-path distance (in steps)
+    to every reachable floor cell. Walls get None.
+    """
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+
+    dist: list[list[Optional[int]]] = [[None for _ in range(cols)] for _ in range(rows)]
+
+    def is_open(r: int, c: int) -> bool:
+        return 0 <= r < rows and 0 <= c < cols and matrix[r][c] == 0
+
+    if not is_open(*goal):
+        return dist
+
+    if connectivity == 8:
+        neighbors = [(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
+    else:
+        neighbors = [(1,0),(-1,0),(0,1),(0,-1)]
+
+    q = deque([goal])
+    dist[goal[0]][goal[1]] = 0
+
+    while q:
+        r, c = q.popleft()
+        d = dist[r][c]
+        assert d is not None
+        for dr, dc in neighbors:
+            nr, nc = r + dr, c + dc
+            if is_open(nr, nc) and dist[nr][nc] is None:
+                dist[nr][nc] = d + 1
+                q.append((nr, nc))
+
+    return dist
+
+
+def pick_spawn_far_from_goal(
+    matrix: Sequence[Sequence[int]],
+    goal: Pos,
+    *,
+    connectivity: int = 4,
+    min_steps: int = 8,
+    max_tries: int = 1000,
+) -> Pos:
+    """
+    Choose a random floor cell that:
+      - is reachable from goal
+      - is at least `min_steps` away by shortest path
+      - is not equal to goal
+
+    Falls back (gracefully) to any reachable cell, and ultimately to (1, 1)
+    if things are weird.
+    """
+    dist = _distance_map_from_goal(matrix, goal, connectivity=connectivity)
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+
+    far_cells: list[Pos] = []
+    reachable_floor: list[Pos] = []
+
+    for r in range(rows):
+        for c in range(cols):
+            if matrix[r][c] != 0:
+                continue
+            d = dist[r][c]
+            if d is None:
+                continue
+            reachable_floor.append((r, c))
+            if d >= min_steps and (r, c) != goal:
+                far_cells.append((r, c))
+
+    rng = random.Random()
+
+    # Prefer far cells
+    if far_cells:
+        return rng.choice(far_cells)
+
+    # If no far cells, but some reachable floors, pick any non-goal
+    if reachable_floor:
+        candidates = [p for p in reachable_floor if p != goal] or reachable_floor
+        return rng.choice(candidates)
+
+    # Ultimate fallback
+    return (1, 1)
+
+
 def iter_demo_walk_frames(
     rows: int = 10,
     cols: int = 10,
@@ -351,6 +473,41 @@ def demo_walk() -> None:
         window_title="Maze Tycoon Demo Walk",
     )
 
+def frames_from_path(
+    matrix: Sequence[Sequence[int]],
+    path: Sequence[Pos],
+    *,
+    note_prefix: str = "run",
+) -> Iterator[MazeFrame]:
+    """
+    Turn a known path (sequence of cells) into MazeFrames.
+    """
+    if not path:
+        rows = len(matrix)
+        cols = len(matrix[0]) if rows else 0
+        return
+        yield  # pragma: no cover, just to make it an iterator
+
+    int_grid: list[list[int]] = [[int(cell) for cell in row] for row in matrix]
+    solution_cells = set(path)
+    visited: set[Pos] = set()
+
+    start = path[0]
+    goal = path[-1]
+
+    for step_idx, pos in enumerate(path):
+        visited.add(pos)
+        yield MazeFrame(
+            grid=int_grid,
+            player=pos,
+            entrance=start,
+            exit=goal,
+            solution_path=solution_cells,
+            visited=set(visited),
+            step_index=step_idx,
+            note=f"{note_prefix}: step {step_idx}/{len(path)-1}",
+        )
+
 def view_real_run_with_pygame(
     cfg: dict,
     *,
@@ -361,6 +518,8 @@ def view_real_run_with_pygame(
     fps: int = 20,
     cell_size: int = 24,
     hud_height: int = 48,
+    max_window_width: Optional[int] = 1280,
+    max_window_height: Optional[int] = 720,
 ) -> None:
     """
     Run a *real* Maze Tycoon trial using game.app.run_once,
@@ -387,16 +546,34 @@ def view_real_run_with_pygame(
 
     rows = len(matrix)
     cols = len(matrix[0]) if rows else 0
-    start: Pos = (1, 1)
-    goal: Pos = (rows - 2, cols - 2)
 
-    frames = frames_from_matrix_with_path(
-        matrix,
-        start=start,
-        goal=goal,
-        connectivity=connectivity,
-        note_prefix=note_prefix,
-    )
+    # 🔹 Adjust cell_size so the window stays within bounds
+    if max_window_width is not None or max_window_height is not None:
+        cell_size = _fit_cell_size_to_window(
+            rows,
+            cols,
+            base_cell_size=cell_size,
+            hud_height=hud_height,
+            max_width=max_window_width,
+            max_height=max_window_height,
+        )
+
+    path = row.get("path", [])
+
+    if path:
+        frames = frames_from_path(matrix, path, note_prefix=note_prefix)
+    else:
+        goal: Pos = (rows - 2, cols - 2)
+    
+        start: Pos = pick_spawn_far_from_goal(matrix, goal, connectivity=connectivity, min_steps=8)
+
+        frames = frames_from_matrix_with_path(
+            matrix,
+            start=start,
+            goal=goal,
+            connectivity=connectivity,
+            note_prefix=note_prefix,
+        )
 
     run_maze_view(
         frames,

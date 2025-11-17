@@ -10,7 +10,7 @@ def _heuristic(name, goal):
 def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4, **_):
     """
     Bidirectional A* on a grid.
-    Returns: dict(path_length, node_expansions, runtime_ms)
+    Returns: dict(path, path_length, node_expansions, runtime_ms)
     """
     H, W = len(matrix), len(matrix[0])
     if goal is None:
@@ -20,7 +20,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
         return 0 <= r < H and 0 <= c < W and matrix[r][c] == 0
 
     if not is_open(*start) or not is_open(*goal):
-        return {"path_length": 0, "node_expansions": 0, "runtime_ms": 0.0}
+        return {"path": [], "path_length": 0, "node_expansions": 0, "runtime_ms": 0.0}
 
     if connectivity == 8:
         nbrs = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
@@ -117,33 +117,63 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
     runtime_ms = (perf_counter() - t0) * 1000.0
 
     if meet_node is None:
-        # Fallback: if forward actually reached goal using A*-like logic
+            # Fallback: if forward actually reached goal using A*-like logic
         if goal in parent_f:
-            steps = 0
+            # Reconstruct path using forward parents only
+            path = []
             cur = goal
             while cur is not None:
-                steps += 1
+                path.append(cur)
                 cur = parent_f[cur]
-            return {"path_length": steps - 1, "node_expansions": expansions, "runtime_ms": runtime_ms}
-        return {"path_length": 0, "node_expansions": expansions, "runtime_ms": runtime_ms}
+            path.reverse()
 
-    # Reconstruct merged length
-    steps = 0
+            path_length = max(0, len(path) - 1)
+
+            return {
+                "path": path,
+                "path_length": path_length,
+                "node_expansions": expansions,
+                "runtime_ms": runtime_ms,
+            }
+
+        # No connection found
+        return {
+            "path": [],
+            "path_length": 0,
+            "node_expansions": expansions,
+            "runtime_ms": runtime_ms,
+     }
+
+
+    # Reconstruct merged path via meet_node
+    # Forward half: start -> ... -> meet_node
+    f_part = []
     cur = meet_node
     while cur is not None:
-        steps += 1
+        f_part.append(cur)
         cur = parent_f.get(cur)
+    f_part.reverse()  # now start..meet_node
 
-    cur = parent_b.get(meet_node)  # skip the meet node once
+    # Backward half: meet_node -> ... -> goal (skip meet_node once)
+    b_part = []
+    cur = parent_b.get(meet_node)
     while cur is not None:
-        steps += 1
+        b_part.append(cur)
         cur = parent_b.get(cur)
 
-    path_length = steps - 1
+    path = f_part + b_part
+    path_length = max(0, len(path) - 1)
+
+    # Preserve the best_mu refinement of length if desired
     if best_mu != float("inf"):
         path_length = min(path_length, int(best_mu))
 
-    return {"path_length": path_length, "node_expansions": expansions, "runtime_ms": runtime_ms}
+    return {
+        "path": path,
+        "path_length": path_length,
+        "node_expansions": expansions,
+        "runtime_ms": runtime_ms,
+    }
 
 def test_biastar_updates_best_mu_with_multiple_meet_nodes():
     from maze_tycoon.algorithms import bidirectional_a_star as mod

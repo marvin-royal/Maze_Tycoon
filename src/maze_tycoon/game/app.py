@@ -1,6 +1,8 @@
 from __future__ import annotations
 import time
 import importlib
+import random
+from collections import deque
 from typing import Any, Dict, Tuple, Optional, Callable, List
 
 from maze_tycoon.core.grid import Grid
@@ -27,6 +29,79 @@ def _load_algorithm(name: str) -> Callable[..., Dict[str, Any]]:
     if solve is None:
         raise SystemExit(f"[error] Algorithm '{name}' has no 'solve' function.")
     return solve
+
+def _distance_map_from_goal(
+    matrix: List[List[int]],
+    goal: Tuple[int, int],
+    connectivity: int = 4,
+) -> List[List[Optional[int]]]:
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+    dist: List[List[Optional[int]]] = [[None for _ in range(cols)] for _ in range(rows)]
+
+    def is_open(r: int, c: int) -> bool:
+        return 0 <= r < rows and 0 <= c < cols and matrix[r][c] == 0
+
+    if not is_open(*goal):
+        return dist
+
+    if connectivity == 8:
+        neighbors = [(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
+    else:
+        neighbors = [(1,0),(-1,0),(0,1),(0,-1)]
+
+    q = deque([goal])
+    dist[goal[0]][goal[1]] = 0
+
+    while q:
+        r, c = q.popleft()
+        d = dist[r][c]
+        assert d is not None
+        for dr, dc in neighbors:
+            nr, nc = r + dr, c + dc
+            if is_open(nr, nc) and dist[nr][nc] is None:
+                dist[nr][nc] = d + 1
+                q.append((nr, nc))
+
+    return dist
+
+def _pick_spawn_far_from_goal(
+    matrix: List[List[int]],
+    goal: Tuple[int, int],
+    *,
+    connectivity: int = 4,
+    min_steps: int = 8,
+) -> Tuple[int, int]:
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+
+    dist = _distance_map_from_goal(matrix, goal, connectivity=connectivity)
+
+    far_cells: List[Tuple[int, int]] = []
+    reachable_floor: List[Tuple[int, int]] = []
+
+    for r in range(rows):
+        for c in range(cols):
+            if matrix[r][c] != 0:
+                continue
+            d = dist[r][c]
+            if d is None:
+                continue
+            reachable_floor.append((r, c))
+            if d >= min_steps and (r, c) != goal:
+                far_cells.append((r, c))
+
+    rng = random.Random()
+
+    if far_cells:
+        return rng.choice(far_cells)
+
+    if reachable_floor:
+        candidates = [p for p in reachable_floor if p != goal] or reachable_floor
+        return rng.choice(candidates)
+
+    # Last resort fallback
+    return (1, 1)
 
 
 def run_once(
@@ -76,8 +151,8 @@ def run_once(
     solve = _load_algorithm(alg_name)
 
     # Run algorithm
-    start = (1, 1)
     goal = (len(mat) - 2, len(mat[0]) - 2)
+    start = _pick_spawn_far_from_goal(mat, goal, connectivity=connectivity, min_steps=8)
     t0 = time.perf_counter()
     metrics = solve(
         mat,
@@ -94,6 +169,12 @@ def run_once(
         metrics["runtime_ms"] = dt_ms
     metrics.setdefault("path_length", 0)
     metrics.setdefault("node_expansions", 0)
+
+    # Record start/goal for downstream consumers (viewer, logging, etc.)
+    metrics.setdefault("start_row", start[0])
+    metrics.setdefault("start_col", start[1])
+    metrics.setdefault("goal_row", goal[0])
+    metrics.setdefault("goal_col", goal[1])
 
     row: Dict[str, Any] = {
         "trial": trial_idx,

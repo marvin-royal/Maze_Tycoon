@@ -47,12 +47,27 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
     runtime_ms = (perf_counter() - t0) * 1000.0
 
     if goal not in parent:
-        return {"path_length": 0, "node_expansions": expansions, "runtime_ms": runtime_ms}
+        return {
+            "path": [],
+            "path_length": 0,
+            "node_expansions": expansions,
+            "runtime_ms": runtime_ms,
+        }
 
-    steps = 0
+    # Reconstruct path from goal back to start
+    path = []
     cur = goal
     while cur is not None:
-        steps += 1
+        path.append(cur)
         cur = parent[cur]
+    path.reverse()
 
-    return {"path_length": steps - 1, "node_expansions": expansions, "runtime_ms": runtime_ms}
+    path_length = max(0, len(path) - 1)
+
+    return {
+        "path": path,
+        "path_length": path_length,
+        "node_expansions": expansions,
+        "runtime_ms": runtime_ms,
+    }
+
