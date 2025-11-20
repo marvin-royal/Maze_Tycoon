@@ -131,6 +131,7 @@ def run_maze_view(
     cell_size: int = 24,
     hud_height: int = 48,
     window_title: str = "Maze Tycoon",
+    hud_callback=None,
 ) -> None:
     """
     Render a sequence of MazeFrame objects using pygame.
@@ -173,6 +174,9 @@ def run_maze_view(
 
             # Draw current frame
             _draw_frame(screen, current, font, cell_size, hud_height)
+
+            if hud_callback is not None:
+                hud_callback(screen)
 
             pygame.display.flip()
             clock.tick(fps)

@@ -25,6 +25,7 @@ from maze_tycoon.game import app as game_app
 from maze_tycoon.game.app import run_once
 
 from .ui_pygame import MazeFrame, run_maze_view
+from .hud import draw_hud
 
 Pos = Tuple[int, int]
 GridLike = Sequence[Sequence[int]]  # or bool; we normalize below
@@ -510,6 +511,7 @@ def frames_from_path(
 
 def view_real_run_with_pygame(
     cfg: dict,
+    game_state,
     *,
     width: int,
     height: int,
@@ -520,11 +522,10 @@ def view_real_run_with_pygame(
     hud_height: int = 48,
     max_window_width: Optional[int] = 1280,
     max_window_height: Optional[int] = 720,
+    headless: bool = False,
 ) -> None:
-    """
-    Run a *real* Maze Tycoon trial using game.app.run_once,
-    then visualize the resulting matrix with a BFS-based animation.
-    """
+
+    # Run solver
     result = run_once(
         cfg,
         width=width,
@@ -535,19 +536,36 @@ def view_real_run_with_pygame(
         sink=None,
     )
 
-    row, matrix = result  # (row_dict, matrix)
+    row, matrix = result
 
     search = cfg["search"]
     connectivity = int(search.get("connectivity", 4))
+    
+    # Compute AFTER run_once returns
     algo = row.get("algorithm", search["algorithm"])
     heuristic = row.get("heuristic") or search.get("heuristic")
-
     note_prefix = f"{algo}" + (f" ({heuristic})" if heuristic else "")
+
+    # Build run_result dict BEFORE defining hud()
+    run_result = {
+        "solver": algo,
+        "steps": row.get("steps"),
+        "path_length": len(row.get("path", [])),
+        "success": row.get("success", True),
+    }
+
+    # In headless mode: just return run_result without animation
+    if headless:
+        return run_result
+
+    # HUD callback depends on game_state + run_result
+    def hud(screen):
+        draw_hud(screen, game_state, run_result)
 
     rows = len(matrix)
     cols = len(matrix[0]) if rows else 0
 
-    # 🔹 Adjust cell_size so the window stays within bounds
+    # Fit to window
     if max_window_width is not None or max_window_height is not None:
         cell_size = _fit_cell_size_to_window(
             rows,
@@ -558,15 +576,19 @@ def view_real_run_with_pygame(
             max_height=max_window_height,
         )
 
+    # Choose animation frames
     path = row.get("path", [])
 
     if path:
         frames = frames_from_path(matrix, path, note_prefix=note_prefix)
     else:
         goal: Pos = (rows - 2, cols - 2)
-    
-        start: Pos = pick_spawn_far_from_goal(matrix, goal, connectivity=connectivity, min_steps=8)
-
+        start: Pos = pick_spawn_far_from_goal(
+            matrix,
+            goal,
+            connectivity=connectivity,
+            min_steps=8,
+        )
         frames = frames_from_matrix_with_path(
             matrix,
             start=start,
@@ -581,7 +603,10 @@ def view_real_run_with_pygame(
         cell_size=cell_size,
         hud_height=hud_height,
         window_title="Maze Tycoon Real Run",
+        hud_callback=hud,
     )
+
+    return run_result
 
 if __name__ == "__main__":
     demo_walk()

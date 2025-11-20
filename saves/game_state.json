@@ -1,0 +1,22 @@
+{
+    "day": 7,
+    "credits": 366,
+    "unlocked_solvers": {
+        "bfs": true,
+        "dijkstra": false,
+        "a_star": false,
+        "bidirectional_a_star": false
+    },
+    "last_maze": {
+        "width": 43,
+        "height": 43,
+        "solver": "bfs",
+        "seed": 6,
+        "result": {
+            "solver": "bfs",
+            "steps": null,
+            "path_length": 626,
+            "success": true
+        }
+    }
+}
