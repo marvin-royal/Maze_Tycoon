@@ -21,9 +21,6 @@ from typing import (
 
 from collections import deque
 
-from maze_tycoon.game import app as game_app
-from maze_tycoon.game.app import run_once
-
 from .ui_pygame import MazeFrame, run_maze_view
 from .hud import draw_hud
 
@@ -40,22 +37,36 @@ def _fit_cell_size_to_window(
     max_height: Optional[int],
 ) -> int:
     """
-    Given maze dimensions and a desired base cell_size, shrink cell_size
-    if needed so that the window (grid + HUD) fits within max_width/height.
+    Choose a cell size that ensures the maze (rows x cols) fits inside the
+    available window space. The HUD occupies the bottom 'hud_height' pixels,
+    so it is excluded from the vertical fit calculation.
     """
+
+    # Start with the preferred cell size.
     cell_size = base_cell_size
 
-    width = cols * cell_size
-    height = rows * cell_size + hud_height
+    # Calculate maze area only — HUD should not reduce maze space.
+    maze_width = cols * cell_size
+
+    # Available vertical space is window_max_height minus HUD
+    if max_height is not None:
+        avail_height = max_height - hud_height
+    else:
+        avail_height = None
+
+    maze_height = rows * cell_size
 
     scale = 1.0
 
-    if max_width is not None and width > max_width:
-        scale = min(scale, max_width / width)
+    # Horizontal fit
+    if max_width is not None and maze_width > max_width:
+        scale = min(scale, max_width / maze_width)
 
-    if max_height is not None and height > max_height:
-        scale = min(scale, max_height / height)
+    # Vertical fit (using available height, not full height)
+    if avail_height is not None and maze_height > avail_height:
+        scale = min(scale, avail_height / maze_height)
 
+    # Apply scaling
     if scale < 1.0:
         cell_size = max(1, int(cell_size * scale))
 
@@ -523,7 +534,10 @@ def view_real_run_with_pygame(
     max_window_width: Optional[int] = 1280,
     max_window_height: Optional[int] = 720,
     headless: bool = False,
-) -> None:
+) -> dict:
+    
+    #app -> run_controller -> ui_adapter -> app (this breaks the loop)
+    from maze_tycoon.game.engine import run_once
 
     # Run solver
     result = run_once(
@@ -547,11 +561,22 @@ def view_real_run_with_pygame(
     note_prefix = f"{algo}" + (f" ({heuristic})" if heuristic else "")
 
     # Build run_result dict BEFORE defining hud()
+    path = row.get("path") or []
+    start = path[0] if path else None
+    goal = path[-1] if len(path) > 0 else None
+
+    # steps fallback: if engine doesn't supply steps, derive it from path
+    steps_val = row.get("steps")
+    if steps_val is None:
+        steps_val = max(0, len(path) - 1)
+
     run_result = {
-        "solver": algo,
-        "steps": row.get("steps"),
-        "path_length": len(row.get("path", [])),
+        "algorithm": algo,
+        "steps": steps_val,
+        "path_length": len(path),
         "success": row.get("success", True),
+        "start": start,
+        "goal": goal,
     }
 
     # In headless mode: just return run_result without animation
@@ -559,21 +584,28 @@ def view_real_run_with_pygame(
         return run_result
 
     # HUD callback depends on game_state + run_result
-    def hud(screen):
-        draw_hud(screen, game_state, run_result)
+    #def hud(screen):
+    #    draw_hud(screen, game_state, run_result)
 
     rows = len(matrix)
     cols = len(matrix[0]) if rows else 0
 
     # Fit to window
     if max_window_width is not None or max_window_height is not None:
+        # If we're using a fixed viewer window, fit to THAT size,
+        # not the larger default max_window_* values.
+        viewer_w, viewer_h = (900, 600)
+
+        fit_max_w = viewer_w if max_window_width is None else min(max_window_width, viewer_w)
+        fit_max_h = viewer_h if max_window_height is None else min(max_window_height, viewer_h)
+
         cell_size = _fit_cell_size_to_window(
             rows,
             cols,
             base_cell_size=cell_size,
             hud_height=hud_height,
-            max_width=max_window_width,
-            max_height=max_window_height,
+            max_width=fit_max_w,
+            max_height=fit_max_h,
         )
 
     # Choose animation frames
@@ -603,7 +635,9 @@ def view_real_run_with_pygame(
         cell_size=cell_size,
         hud_height=hud_height,
         window_title="Maze Tycoon Real Run",
-        hud_callback=hud,
+        hud_callback=None,
+        quit_on_exit=False,
+        window_size=(900, 600),
     )
 
     return run_result

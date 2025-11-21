@@ -4,7 +4,9 @@ from typing import Optional, Dict, Any
 from .gamestate import GameState
 from .economy import calculate_reward  # (You will create this)
 from .ui_adapter import view_real_run_with_pygame
+from ..io.logging import get_logger, log_game_event
 
+_run_logger = get_logger("run")
 
 def run_one_game_cycle(
     game_state: GameState,
@@ -33,7 +35,7 @@ def run_one_game_cycle(
         },
     }
 
-    # Run the actual maze generation & visualization
+    # Run the actual maze generation & visualization (or headless)
     run_result = view_real_run_with_pygame(
         game_state=game_state,
         cfg=cfg,
@@ -58,5 +60,26 @@ def run_one_game_cycle(
         "seed": seed,
         "result": run_result,
     }
+
+    # Log AFTER updates so credits / day reflect the new state
+    log_game_event(
+        _run_logger,
+        "run_completed",
+        {
+            "day": game_state.day,
+            "generator": generator,
+            "solver": algorithm,
+            "width": width,
+            "height": height,
+            "seed": seed,
+            "success": run_result.get("success"),
+            "steps": run_result.get("steps"),
+            "path_length": run_result.get("path_length"),
+            "reward": reward,
+            "credits_after": game_state.credits,
+            "start": run_result.get("start"),
+            "goal": run_result.get("goal"),
+        },
+    )
 
     return run_result

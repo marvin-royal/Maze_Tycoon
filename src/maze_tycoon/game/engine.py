@@ -1,0 +1,248 @@
+from __future__ import annotations
+
+import time
+import importlib
+import random
+from collections import deque
+from typing import Any, Dict, Tuple, Optional, Callable, List
+
+from maze_tycoon.core.grid import Grid
+from maze_tycoon.core.metrics import InMemoryMetricsSink  # optional dependency
+from maze_tycoon.generation.dfs_backtracker import generate as gen_dfs
+from maze_tycoon.generation.prim import generate as gen_prim
+from maze_tycoon.core.maze import pick_random_goal_from_matrix
+from maze_tycoon.core.rng import RNG
+
+# Simple registry (generator name -> function(Grid) -> None)
+GEN_MAP: Dict[str, Callable[[Grid], None]] = {
+    "dfs_backtracker": gen_dfs,
+    "prim": gen_prim,
+}
+
+
+def _load_algorithm(name: str) -> Callable[..., Dict[str, Any]]:
+    """
+    Dynamically load an algorithm module and return its 'solve' callable.
+    Ex: name='bfs' -> maze_tycoon.algorithms.bfs.solve(...)
+    """
+    mod = importlib.import_module(f"maze_tycoon.algorithms.{name}")
+    solve = getattr(mod, "solve", None)
+    if solve is None:
+        raise SystemExit(f"[error] Algorithm '{name}' has no 'solve' function.")
+    return solve
+
+
+def _distance_map_from_goal(
+    matrix: List[List[int]],
+    goal: Tuple[int, int],
+    connectivity: int = 4,
+) -> List[List[Optional[int]]]:
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+    dist: List[List[Optional[int]]] = [[None for _ in range(cols)] for _ in range(rows)]
+
+    def is_open(r: int, c: int) -> bool:
+        return 0 <= r < rows and 0 <= c < cols and matrix[r][c] == 0
+
+    if not is_open(*goal):
+        return dist
+
+    if connectivity == 8:
+        neighbors = [(1, 0), (-1, 0), (0, 1), (0, -1),
+                     (1, 1), (1, -1), (-1, 1), (-1, -1)]
+    else:
+        neighbors = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+    q = deque([goal])
+    dist[goal[0]][goal[1]] = 0
+
+    while q:
+        r, c = q.popleft()
+        d = dist[r][c]
+        assert d is not None
+        for dr, dc in neighbors:
+            nr, nc = r + dr, c + dc
+            if is_open(nr, nc) and dist[nr][nc] is None:
+                dist[nr][nc] = d + 1
+                q.append((nr, nc))
+
+    return dist
+
+
+def _pick_spawn_far_from_goal(
+    matrix: List[List[int]],
+    goal: Tuple[int, int],
+    *,
+    connectivity: int = 4,
+    min_steps: int = 8,
+) -> Tuple[int, int]:
+    rows = len(matrix)
+    cols = len(matrix[0]) if rows else 0
+
+    dist = _distance_map_from_goal(matrix, goal, connectivity=connectivity)
+
+    far_cells: List[Tuple[int, int]] = []
+    reachable_floor: List[Tuple[int, int]] = []
+
+    for r in range(rows):
+        for c in range(cols):
+            if matrix[r][c] != 0:
+                continue
+            d = dist[r][c]
+            if d is None:
+                continue
+            reachable_floor.append((r, c))
+            if d >= min_steps and (r, c) != goal:
+                far_cells.append((r, c))
+
+    rng = random.Random()
+
+    if far_cells:
+        return rng.choice(far_cells)
+
+    if reachable_floor:
+        candidates = [p for p in reachable_floor if p != goal] or reachable_floor
+        return rng.choice(candidates)
+
+    # Last resort fallback
+    return (1, 1)
+
+
+def run_once(
+    cfg: Dict[str, Any],
+    width: int,
+    height: int,
+    trial_idx: int,
+    base_seed: int,
+    *,
+    return_matrix: bool = False,
+    sink: Optional[InMemoryMetricsSink] = None,
+) -> Dict[str, Any] | Tuple[Dict[str, Any], List[List[int]]]:
+    """
+    One end-to-end trial:
+      1) Build Grid with deterministic seed
+      2) Carve maze using chosen generator
+      3) Solve with chosen algorithm (+ heuristic, connectivity)
+      4) Normalize metrics and return a summary row
+      5) Optionally record to a metrics sink
+      6) Optionally return the matrix
+
+    cfg shape (example):
+      {
+        "maze":   {"generator": "dfs_backtracker"},
+        "search": {"algorithm": "bfs", "heuristic": "manhattan", "connectivity": 4}
+      }
+    """
+    # Deterministic per (size, trial)
+    seed = (base_seed or 0) + trial_idx + (width * 1000 + height)
+    grid = Grid(width, height, seed=seed)
+
+    # Carve maze
+    gen_name = cfg["maze"]["generator"]
+    gen_fn = GEN_MAP.get(gen_name)
+    if gen_fn is None:
+        raise SystemExit(
+            f"[error] Unknown generator '{gen_name}'. "
+            f"Choose one of: {', '.join(GEN_MAP.keys())}"
+        )
+    gen_fn(grid)
+
+    # Convert to matrix for algorithms
+    mat = grid.to_matrix()
+
+    # Choose algorithm (dynamic import)
+    search = cfg["search"]
+    alg_name: str = search["algorithm"]                 # e.g. "bfs", "a_star"
+    heuristic: Optional[str] = search.get("heuristic")  # may be None (e.g. BFS)
+    connectivity: int = int(search.get("connectivity", 4))  # 4 or 8
+    solve = _load_algorithm(alg_name)
+
+    # --- Random goal placement (deterministic using seed) ---
+    rng = RNG(seed)
+    goal = pick_random_goal_from_matrix(
+        mat,
+        rng,
+        start=(1, 1),
+    )
+
+    # Spawn the agent somewhere far from the goal
+    start = _pick_spawn_far_from_goal(
+        mat,
+        goal,
+        connectivity=connectivity,
+        min_steps=8,
+    )
+
+    t0 = time.perf_counter()
+    metrics = solve(
+        mat,
+        start=start,
+        goal=goal,
+        heuristic=heuristic,
+        connectivity=connectivity,
+    )
+    dt_ms = (time.perf_counter() - t0) * 1000.0
+
+    # Normalize metrics and ensure runtime present
+    metrics = metrics or {}
+    if metrics.get("runtime_ms") in (None, 0):
+        metrics["runtime_ms"] = dt_ms
+    metrics.setdefault("path_length", 0)
+    metrics.setdefault("node_expansions", 0)
+
+    # Record start/goal for downstream consumers (viewer, logging, etc.)
+    metrics.setdefault("start_row", start[0])
+    metrics.setdefault("start_col", start[1])
+    metrics.setdefault("goal_row", goal[0])
+    metrics.setdefault("goal_col", goal[1])
+
+    row: Dict[str, Any] = {
+        "trial": trial_idx,
+        "width": width,
+        "height": height,
+        "seed": seed,
+        "generator": gen_name,
+        "algorithm": alg_name,
+        "heuristic": heuristic,
+        **metrics,
+    }
+
+    # optional metrics sink
+    if sink is not None:
+        sink.record_trial(row)
+
+    return (row, mat) if return_matrix else row
+
+
+def run_trials(
+    cfg: Dict[str, Any],
+    *,
+    width: int,
+    height: int,
+    trials: int,
+    base_seed: int = 0,
+    sink: Optional[InMemoryMetricsSink] = None,
+    return_last_matrix: bool = False,
+):
+    """
+    Convenience orchestration for multiple trials.
+    Returns (rows [, last_matrix_if_requested])
+    """
+    rows: List[Dict[str, Any]] = []
+    last_matrix: Optional[List[List[int]]] = None
+    for i in range(trials):
+        result = run_once(
+            cfg,
+            width,
+            height,
+            i,
+            base_seed,
+            return_matrix=return_last_matrix,
+            sink=sink,
+        )
+        if return_last_matrix:
+            row, last_matrix = result  # type: ignore[assignment]
+            rows.append(row)
+        else:
+            rows.append(result)  # type: ignore[arg-type]
+    return (rows, last_matrix) if return_last_matrix else rows

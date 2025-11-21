@@ -1,229 +1,302 @@
 from __future__ import annotations
+
 import time
+from enum import Enum, auto
+import pygame
 import importlib
 import random
 from collections import deque
 from typing import Any, Dict, Tuple, Optional, Callable, List
 
-from maze_tycoon.core.grid import Grid
 from maze_tycoon.core.metrics import InMemoryMetricsSink  # optional dependency
 # Generators (add more as you implement them)
 from maze_tycoon.generation.dfs_backtracker import generate as gen_dfs
 from maze_tycoon.generation.prim import generate as gen_prim
 from maze_tycoon.io.serialize import write_csv, write_jsonl, append_jsonl
+from maze_tycoon.game.gamestate import GameState, load_game_state, save_game_state
+from maze_tycoon.game.economy import calculate_reward
+from maze_tycoon.game.engine import run_once, run_trials
 
-# Simple registry (generator name -> function(Grid) -> None)
-GEN_MAP: Dict[str, Callable[[Grid], None]] = {
-    "dfs_backtracker": gen_dfs,
-    "prim": gen_prim,
+MIN_MAZE_SIZE = 10
+MAX_MAZE_SIZE = 50
+
+ALGORITHMS = ["bfs", "dijkstra", "a_star", "bidirectional_a_star"]
+ALGORITHM_LABELS = {
+    "bfs": "BFS (Breadth-First Search)",
+    "dijkstra": "Dijkstra",
+    "a_star": "A* Search",
+    "bidirectional_a_star": "Bidirectional A*",
 }
+MENU_ITEMS = ["Start Run", "Quit"]
 
+class GameMode(Enum):
+    MENU = auto()
+    RUNNING = auto()
+    SUMMARY = auto()
+    QUIT = auto()
 
-def _load_algorithm(name: str) -> Callable[..., Dict[str, Any]]:
+def choose_maze_size() -> tuple[int, int]:
+    """Random cell-space maze size for interactive runs."""
+    w = random.randint(MIN_MAZE_SIZE, MAX_MAZE_SIZE)
+    h = random.randint(MIN_MAZE_SIZE, MAX_MAZE_SIZE)
+
+    # Optional: enforce odd sizes if you prefer
+    if w % 2 == 0:
+        w += 1 if w < MAX_MAZE_SIZE else -1
+    if h % 2 == 0:
+        h += 1 if h < MAX_MAZE_SIZE else -1
+    return w, h
+
+def update_and_draw_menu(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    font: pygame.font.Font,
+    game_state: GameState,
+    selected_algorithm: str,
+) -> tuple[GameMode, str]:
+    selected_index = 0
+    running = True
+    algo_index = ALGORITHMS.index(selected_algorithm)
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return GameMode.QUIT, selected_algorithm
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected_index = (selected_index - 1) % len(MENU_ITEMS)
+                elif event.key == pygame.K_DOWN:
+                    selected_index = (selected_index + 1) % len(MENU_ITEMS)
+                elif event.key == pygame.K_LEFT:
+                    algo_index = (algo_index - 1) % len(ALGORITHMS)
+                elif event.key == pygame.K_RIGHT:
+                    algo_index = (algo_index + 1) % len(ALGORITHMS)
+                elif event.key == pygame.K_RETURN:
+                    choice = MENU_ITEMS[selected_index]
+                    if choice == "Start Run":
+                        return GameMode.RUNNING, ALGORITHMS[algo_index]
+                    elif choice == "Quit":
+                        return GameMode.QUIT, ALGORITHMS[algo_index]
+
+        selected_algorithm = ALGORITHMS[algo_index]
+
+        # ---- drawing ----
+        screen.fill((20, 20, 20))
+
+        title = font.render("Maze Tycoon", True, (250, 250, 250))
+        screen.blit(title, (40, 40))
+
+        # Show current day/credits
+        stats = font.render(
+            f"Day: {game_state.day}   Credits: {game_state.credits}",
+            True,
+            (200, 200, 200),
+        )
+        screen.blit(stats, (40, 80))
+
+        # Menu items
+        base_y = 140
+        for i, item in enumerate(MENU_ITEMS):
+            color = (240, 240, 240) if i == selected_index else (120, 120, 120)
+            text = font.render(item, True, color)
+            screen.blit(text, (80, base_y + i * 40))
+
+        # Algorithm selection line
+        algo_label = ALGORITHM_LABELS.get(selected_algorithm, selected_algorithm)
+        algo_text = font.render(
+            f"Algorithm: {algo_label}   (← / → to change)", True, (180, 220, 250)
+        )
+        screen.blit(algo_text, (80, base_y + 120))
+
+        pygame.display.flip()
+        clock.tick(30)
+
+    return GameMode.QUIT, selected_algorithm
+
+def update_and_draw_summary(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    font: pygame.font.Font,
+    game_state: GameState,
+    run_result: Dict[str, Any],
+) -> GameMode:
     """
-    Dynamically load an algorithm module and return its 'solve' callable.
-    Ex: name='bfs' -> maze_tycoon.algorithms.bfs.solve(...)
+    Simple post-run summary screen that stays in the same window.
     """
-    mod = importlib.import_module(f"maze_tycoon.algorithms.{name}")
-    solve = getattr(mod, "solve", None)
-    if solve is None:
-        raise SystemExit(f"[error] Algorithm '{name}' has no 'solve' function.")
-    return solve
+    # Extract a few convenient fields
+    alg = run_result.get("algorithm", "?")
+    width = run_result.get("width", "?")
+    height = run_result.get("height", "?")
+    seed = run_result.get("seed", "?")
+    path_len = run_result.get("path_length", "?")
+    steps = run_result.get("steps", "?")
+    reward = run_result.get("reward", 0)
+    credits_before = run_result.get("credits_before", game_state.credits - reward)
+    credits_after = run_result.get("credits_after", game_state.credits)
 
-def _distance_map_from_goal(
-    matrix: List[List[int]],
-    goal: Tuple[int, int],
-    connectivity: int = 4,
-) -> List[List[Optional[int]]]:
-    rows = len(matrix)
-    cols = len(matrix[0]) if rows else 0
-    dist: List[List[Optional[int]]] = [[None for _ in range(cols)] for _ in range(rows)]
+    if not pygame.get_init():
+        pygame.init()
+    if not pygame.display.get_init():
+        pygame.display.init()
 
-    def is_open(r: int, c: int) -> bool:
-        return 0 <= r < rows and 0 <= c < cols and matrix[r][c] == 0
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return GameMode.QUIT
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+                    return GameMode.MENU
 
-    if not is_open(*goal):
-        return dist
+        screen.fill((10, 10, 10))
 
-    if connectivity == 8:
-        neighbors = [(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
-    else:
-        neighbors = [(1,0),(-1,0),(0,1),(0,-1)]
+        lines = [
+            "Run Summary",
+            "",
+            f"Algorithm: {alg}",
+            f"Maze: {width} x {height}",
+            f"Seed: {seed}",
+            f"Path length: {path_len}",
+            f"Steps: {steps}",
+            "",
+            f"Reward: {reward}",
+            f"Credits: {credits_before} → {credits_after}",
+            "",
+            "Press Enter to return to menu",
+        ]
 
-    q = deque([goal])
-    dist[goal[0]][goal[1]] = 0
+        y = 60
+        for i, line in enumerate(lines):
+            color = (240, 240, 240) if i <= 1 else (200, 200, 200)
+            text = font.render(line, True, color)
+            screen.blit(text, (60, y))
+            y += 32
 
-    while q:
-        r, c = q.popleft()
-        d = dist[r][c]
-        assert d is not None
-        for dr, dc in neighbors:
-            nr, nc = r + dr, c + dc
-            if is_open(nr, nc) and dist[nr][nc] is None:
-                dist[nr][nc] = d + 1
-                q.append((nr, nc))
+        pygame.display.flip()
+        clock.tick(30)
 
-    return dist
-
-def _pick_spawn_far_from_goal(
-    matrix: List[List[int]],
-    goal: Tuple[int, int],
-    *,
-    connectivity: int = 4,
-    min_steps: int = 8,
-) -> Tuple[int, int]:
-    rows = len(matrix)
-    cols = len(matrix[0]) if rows else 0
-
-    dist = _distance_map_from_goal(matrix, goal, connectivity=connectivity)
-
-    far_cells: List[Tuple[int, int]] = []
-    reachable_floor: List[Tuple[int, int]] = []
-
-    for r in range(rows):
-        for c in range(cols):
-            if matrix[r][c] != 0:
-                continue
-            d = dist[r][c]
-            if d is None:
-                continue
-            reachable_floor.append((r, c))
-            if d >= min_steps and (r, c) != goal:
-                far_cells.append((r, c))
-
-    rng = random.Random()
-
-    if far_cells:
-        return rng.choice(far_cells)
-
-    if reachable_floor:
-        candidates = [p for p in reachable_floor if p != goal] or reachable_floor
-        return rng.choice(candidates)
-
-    # Last resort fallback
-    return (1, 1)
-
-
-def run_once(
-    cfg: Dict[str, Any],
-    width: int,
-    height: int,
-    trial_idx: int,
-    base_seed: int,
-    *,
-    return_matrix: bool = False,
-    sink: Optional[InMemoryMetricsSink] = None,
-) -> Dict[str, Any] | Tuple[Dict[str, Any], List[List[int]]]:
+def choose_heuristic(algorithm: str, default: Optional[str] = None) -> Optional[str]:
     """
-    One end-to-end trial:
-      1) Build Grid with deterministic seed
-      2) Carve maze using chosen generator
-      3) Solve with chosen algorithm (+ heuristic, connectivity)
-      4) Normalize metrics and return a summary row
-      5) Optionally record to a metrics sink
-      6) Optionally return the matrix
-
-    cfg shape (example):
-      {
-        "maze":   {"generator": "dfs_backtracker"},
-        "search": {"algorithm": "bfs", "heuristic": "manhattan", "connectivity": 4}
-      }
+    For algorithms that like a heuristic (A*, bidirectional A*),
+    pick a sensible default if none is set.
     """
-    # Deterministic per (size, trial)
-    seed = (base_seed or 0) + trial_idx + (width * 1000 + height)
-    grid = Grid(width, height, seed=seed)
+    if default is not None:
+        return default
+    if algorithm in ("a_star", "bidirectional_a_star"):
+        return "manhattan"
+    return None
 
-    # Carve maze
-    gen_name = cfg["maze"]["generator"]
-    gen_fn = GEN_MAP.get(gen_name)
-    if gen_fn is None:
-        raise SystemExit(f"[error] Unknown generator '{gen_name}'. Choose one of: {', '.join(GEN_MAP.keys())}")
-    gen_fn(grid)
-
-    # Convert to matrix for algorithms
-    mat = grid.to_matrix()
-
-    # Choose algorithm (dynamic import)
-    search = cfg["search"]
-    alg_name: str = search["algorithm"]                 # e.g. "bfs", "a_star"
-    heuristic: Optional[str] = search.get("heuristic")  # may be None (e.g. BFS)
-    connectivity: int = int(search.get("connectivity", 4))  # 4 or 8
-    solve = _load_algorithm(alg_name)
-
-    # Run algorithm
-    goal = (len(mat) - 2, len(mat[0]) - 2)
-    start = _pick_spawn_far_from_goal(mat, goal, connectivity=connectivity, min_steps=8)
-    t0 = time.perf_counter()
-    metrics = solve(
-        mat,
-        start=start,
-        goal=goal,
-        heuristic=heuristic,
-        connectivity=connectivity,
-    )
-    dt_ms = (time.perf_counter() - t0) * 1000.0
-
-    # Normalize metrics and ensure runtime present
-    metrics = metrics or {}
-    if metrics.get("runtime_ms") in (None, 0):
-        metrics["runtime_ms"] = dt_ms
-    metrics.setdefault("path_length", 0)
-    metrics.setdefault("node_expansions", 0)
-
-    # Record start/goal for downstream consumers (viewer, logging, etc.)
-    metrics.setdefault("start_row", start[0])
-    metrics.setdefault("start_col", start[1])
-    metrics.setdefault("goal_row", goal[0])
-    metrics.setdefault("goal_col", goal[1])
-
-    row: Dict[str, Any] = {
-        "trial": trial_idx,
-        "width": width,
-        "height": height,
-        "seed": seed,
-        "generator": gen_name,
-        "algorithm": alg_name,
-        "heuristic": heuristic,
-        **metrics,
-    }
-
-    # optional metrics sink
-    if sink is not None:
-        sink.record_trial(row)
-
-    return (row, mat) if return_matrix else row
-
-
-def run_trials(
-    cfg: Dict[str, Any],
-    *,
-    width: int,
-    height: int,
-    trials: int,
-    base_seed: int = 0,
-    sink: Optional[InMemoryMetricsSink] = None,
-    return_last_matrix: bool = False,
-):
+def run_interactive_game() -> None:
     """
-    Convenience orchestration for multiple trials.
-    Returns (rows [, last_matrix_if_requested])
+    Main interactive game loop for Maze Tycoon using a single pygame window.
+
+    Modes:
+      - MENU:    choose action + algorithm
+      - RUNNING: perform one maze run (headless for now)
+      - SUMMARY: show results, then go back to menu
     """
-    rows: List[Dict[str, Any]] = []
-    last_matrix: Optional[List[List[int]]] = None
-    for i in range(trials):
-        result = run_once(cfg, width, height, i, base_seed, return_matrix=return_last_matrix, sink=sink)
-        if return_last_matrix:
-            row, last_matrix = result  # type: ignore[assignment]
-            rows.append(row)
-        else:
-            rows.append(result)  # type: ignore[arg-type]
-    return (rows, last_matrix) if return_last_matrix else rows
+    pygame.init()
+    screen = pygame.display.set_mode((900, 600))
+    pygame.display.set_caption("Maze Tycoon")
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont("consolas", 24)
+
+    # Load or create GameState
+    try:
+        game_state = load_game_state()
+    except Exception:
+        game_state = GameState()
+
+    selected_algorithm = "bfs"
+    current_mode = GameMode.MENU
+    last_run_result: Optional[Dict[str, Any]] = None
+    running = True
+
+    while running:
+        if current_mode == GameMode.MENU:
+            current_mode, selected_algorithm = update_and_draw_menu(
+                screen,
+                clock,
+                font,
+                game_state,
+                selected_algorithm,
+            )
+
+        elif current_mode == GameMode.RUNNING:
+            width, height = choose_maze_size()
+            seed = random.randint(0, 10_000_000)
+            heuristic = choose_heuristic(selected_algorithm)
+            credits_before = game_state.credits
+
+            # --- Build cfg exactly like run_controller does ---
+            cfg = {
+                "maze": {"generator": "dfs_backtracker"},
+                "search": {
+                    "algorithm": selected_algorithm,
+                    "heuristic": heuristic,
+                    "connectivity": 4,
+                },
+            }
+
+            # --- Animated run through ui_adapter ---
+            from maze_tycoon.game.ui_adapter import view_real_run_with_pygame
+            run_result = view_real_run_with_pygame(
+                cfg=cfg,
+                game_state=game_state,
+                width=width,
+                height=height,
+                base_seed=seed,
+                headless=False,   # this enables animation
+            )
+
+            screen = pygame.display.get_surface() or screen
+
+            # --- Apply game rules yourself here ---
+            from maze_tycoon.game.economy import calculate_reward
+            reward = calculate_reward(run_result)
+
+            game_state.day += 1
+            game_state.credits += reward
+
+            last_run_result = {
+                **run_result,
+                "reward": reward,
+                "credits_before": credits_before,
+                "credits_after": game_state.credits,
+                "width": width,
+                "height": height,
+                "seed": seed,
+                "algorithm": selected_algorithm,
+            }
+
+            current_mode = GameMode.SUMMARY
+
+
+        elif current_mode == GameMode.SUMMARY:
+            if last_run_result is None:
+                current_mode = GameMode.MENU
+            else:
+                mode_after = update_and_draw_summary(
+                    screen,
+                    clock,
+                    font,
+                    game_state,
+                    last_run_result,
+                )
+                current_mode = mode_after
+
+        elif current_mode == GameMode.QUIT:
+            running = False
+
+        # Persist game state occasionally (you can make this smarter)
+        save_game_state(game_state)
+
+    pygame.quit()
 
 
 if __name__ == "__main__":
     import json, argparse, os
     p = argparse.ArgumentParser()
-    p.add_argument("--gen", default="dfs_backtracker", choices=list(GEN_MAP.keys()))
+    p.add_argument("--gen", default="dfs_backtracker", choices=list("defs_backtracker prim".split()))
     p.add_argument("--alg", default="bfs")
     p.add_argument("--heuristic", default=None)
     p.add_argument("--connectivity", type=int, default=4, choices=[4, 8])
@@ -232,6 +305,12 @@ if __name__ == "__main__":
     p.add_argument("--height", type=int, default=21)
     p.add_argument("--trials", type=int, default=1)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--mode",
+        choices=["batch", "interactive"],
+        default="batch",
+        help="batch = run trials/headless (default), interactive = single-window game loop",
+    )
 
     # ASCII preview
     p.add_argument("--ascii", action="store_true", help="Print ASCII maze for the first trial")
@@ -244,12 +323,20 @@ if __name__ == "__main__":
 
     args = p.parse_args()
 
+    if args.mode == "interactive":
+        run_interactive_game()
+        raise SystemExit(0)
+
+    # ---- batch (headless) mode ----
     cfg = {
         "maze": {"generator": args.gen},
-        "search": {"algorithm": args.alg, "heuristic": args.heuristic, "connectivity": args.connectivity},
+        "search": {
+            "algorithm": args.alg,
+            "heuristic": args.heuristic,
+            "connectivity": args.connectivity,
+        },
     }
 
-    # Run trials
     from maze_tycoon.core.metrics import InMemoryMetricsSink
     sink = InMemoryMetricsSink()
     rows = run_trials(
@@ -273,24 +360,30 @@ if __name__ == "__main__":
         for i, row in enumerate(rows):
             if args.ascii and i > 0:
                 break
-            print(f"\n=== {row['width']}x{row['height']} trial {row['trial']} seed={row['seed']} "
-                  f"gen={row['generator']} alg={row['algorithm']} ===")
-            # Use last_matrix for the last trial; otherwise re-run minimal render per trial if needed.
-            # For simplicity here, show the last captured matrix if present:
+            print(
+                f"\n=== {row['width']}x{row['height']} trial {row['trial']} seed={row['seed']} "
+                f"gen={row['generator']} alg={row['algorithm']} ==="
+            )
             if last_matrix is not None:
                 print(render_ascii(last_matrix))
 
-    # NEW: outputs
+    # Outputs
     if args.csv:
         write_csv(rows, args.csv, append=args.append)
-        print(f"[csv] wrote {len(rows)} row(s) to {os.path.abspath(args.csv)}" + (" (append)" if args.append else ""))
+        print(
+            f"[csv] wrote {len(rows)} row(s) to {os.path.abspath(args.csv)}"
+            + (" (append)" if args.append else "")
+        )
 
     if args.jsonl:
         if args.append:
             append_jsonl(rows, args.jsonl)
         else:
             write_jsonl(rows, args.jsonl)
-        print(f"[jsonl] wrote {len(rows)} row(s) to {os.path.abspath(args.jsonl)}" + (" (append)" if args.append else ""))
+        print(
+            f"[jsonl] wrote {len(rows)} row(s) to {os.path.abspath(args.jsonl)}"
+            + (" (append)" if args.append else "")
+        )
 
     # Quick summary
     avg = sink.aggregate()

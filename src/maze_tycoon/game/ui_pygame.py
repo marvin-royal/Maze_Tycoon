@@ -132,6 +132,8 @@ def run_maze_view(
     hud_height: int = 48,
     window_title: str = "Maze Tycoon",
     hud_callback=None,
+    quit_on_exit=True,
+    window_size: Optional[Tuple[int, int]] = None,
 ) -> None:
     """
     Render a sequence of MazeFrame objects using pygame.
@@ -153,10 +155,13 @@ def run_maze_view(
 
     pygame.init()
     try:
-        width = current.cols * cell_size
-        height = current.rows * cell_size + hud_height
+        if window_size is None: 
+            width = current.cols * cell_size
+            height = current.rows * cell_size + hud_height
+            screen = pygame.display.set_mode((width, height))
+        else:
+            screen = pygame.display.set_mode(window_size)
 
-        screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption(window_title)
 
         font = pygame.font.SysFont(None, 18)
@@ -188,7 +193,8 @@ def run_maze_view(
                 # No more frames; keep displaying the last one.
                 pass
     finally:
-        pygame.quit()
+        if quit_on_exit:
+            pygame.quit()
 
 
 def _draw_frame(
@@ -205,9 +211,18 @@ def _draw_frame(
     screen.fill(color("background"))
 
     rows, cols = frame.rows, frame.cols
-    maze_height = rows * cell_size
+    maze_w = cols * cell_size
+    maze_h = rows * cell_size
 
-    # Draw maze cells
+    # Available drawing area (HUD takes bottom space)
+    avail_w = screen.get_width()
+    avail_h = screen.get_height() - hud_height
+
+    # Centering offsets
+    x0 = max(0, (avail_w - maze_w) // 2)
+    y0 = max(0, (avail_h - maze_h) // 2)
+
+    # Colors
     wall_color = color("wall")
     floor_color = color("floor")
     visited_color = color("visited")
@@ -217,65 +232,64 @@ def _draw_frame(
     solution = frame.solution_path or ()
     visited = frame.visited or ()
 
-    # Floor + grid dots
+    # --- Floor + grid dots ---
     for r in range(rows):
         for c in range(cols):
-            x = c * cell_size
-            y = r * cell_size
+            x = x0 + c * cell_size
+            y = y0 + r * cell_size
             rect = (x, y, cell_size, cell_size)
 
-            # Base floor
             pygame.draw.rect(screen, floor_color, rect)
 
-            # Subtle grid dot
             cx = x + cell_size // 2
             cy = y + cell_size // 2
             pygame.draw.circle(screen, grid_dot_color, (cx, cy), max(1, cell_size // 8))
 
-    # Visited cells
+    # --- Visited overlay ---
     for (r, c) in visited:
         if 0 <= r < rows and 0 <= c < cols:
-            x = c * cell_size
-            y = r * cell_size
+            x = x0 + c * cell_size
+            y = y0 + r * cell_size
             rect = (x, y, cell_size, cell_size)
             pygame.draw.rect(screen, visited_color, rect)
 
-    # Walls
+    # --- Walls ---
     for r in range(rows):
         for c in range(cols):
             if frame.grid[r][c]:
-                x = c * cell_size
-                y = r * cell_size
+                x = x0 + c * cell_size
+                y = y0 + r * cell_size
                 rect = (x, y, cell_size, cell_size)
                 pygame.draw.rect(screen, wall_color, rect)
 
-    # Solution path overlay (drawn after walls/floor so it's visible)
+    # --- Solution path ---
     for (r, c) in solution:
         if 0 <= r < rows and 0 <= c < cols:
-            x = c * cell_size
-            y = r * cell_size
+            x = x0 + c * cell_size
+            y = y0 + r * cell_size
             inset = max(2, cell_size // 6)
             rect = (x + inset, y + inset, cell_size - 2 * inset, cell_size - 2 * inset)
             pygame.draw.rect(screen, path_color, rect)
 
-    # Entrance / Exit markers
+    # --- Entrance / Exit markers ---
     if frame.entrance is not None:
-        _draw_marker(screen, frame.entrance, cell_size, color("entrance"))
+        _draw_marker(screen, frame.entrance, cell_size, color("entrance"), x0, y0)
 
     if frame.exit is not None:
-        _draw_marker(screen, frame.exit, cell_size, color("exit"))
+        _draw_marker(screen, frame.exit, cell_size, color("exit"), x0, y0)
 
-    # Player
+    # --- Player ---
     if frame.player is not None:
         r, c = frame.player
         if 0 <= r < rows and 0 <= c < cols:
-            x = c * cell_size + cell_size // 2
-            y = r * cell_size + cell_size // 2
+            x = x0 + c * cell_size + cell_size // 2
+            y = y0 + r * cell_size + cell_size // 2
             radius = max(4, cell_size // 3)
             pygame.draw.circle(screen, color("player"), (x, y), radius)
 
-    # HUD bar
-    _draw_hud(screen, frame, font, maze_height, hud_height)
+    # --- HUD at bottom of window ---
+    hud_y = screen.get_height() - hud_height
+    _draw_hud(screen, frame, font, hud_y, hud_height)
 
 
 def _draw_marker(
@@ -283,10 +297,12 @@ def _draw_marker(
     pos: Pos,
     cell_size: int,
     marker_color: Tuple[int, int, int],
+    x0: int = 0,
+    y0: int = 0,
 ) -> None:
     r, c = pos
-    x = c * cell_size + cell_size // 2
-    y = r * cell_size + cell_size // 2
+    x = x0 + c * cell_size + cell_size // 2
+    y = y0 + r * cell_size + cell_size // 2
     radius = max(3, cell_size // 4)
     pygame.draw.circle(screen, marker_color, (x, y), radius)
 
@@ -313,7 +329,16 @@ def _draw_hud(
     lines = []
     if frame.step_index is not None:
         lines.append(f"Step: {frame.step_index}")
-    lines.append(f"Size: {frame.rows} x {frame.cols}")
+
+    # Convert from matrix space (2n+1) back to cell space if it looks like a maze matrix
+    rows, cols = frame.rows, frame.cols
+    if rows % 2 == 1 and cols % 2 == 1:
+        cell_rows = (rows - 1) // 2
+        cell_cols = (cols - 1) // 2
+    else:
+        cell_rows, cell_cols = rows, cols
+
+    lines.append(f"Size: {cell_rows} x {cell_cols}")
 
     if frame.note:
         # Short note / solver status

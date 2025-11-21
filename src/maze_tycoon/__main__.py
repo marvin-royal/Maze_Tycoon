@@ -12,6 +12,7 @@ from .game.gamestate import (
 from .game.menu import run_menu_screen
 from .game.run_controller import run_one_game_cycle
 from .game.ui_adapter import demo_walk_loop
+from .io.logging import init_logging, get_logger
 
 
 def parse_args():
@@ -50,8 +51,8 @@ def parse_args():
         help="Grid connectivity (4 or 8)",
     )
 
-    p.add_argument("--width", type=int, default=43)
-    p.add_argument("--height", type=int, default=43)
+    p.add_argument("--width", type=int, default=None, help="Maze width (cells)")
+    p.add_argument("--height", type=int, default=None, help="Maze height (cells)")
     p.add_argument(
         "--seed",
         type=int,
@@ -84,20 +85,60 @@ def _ensure_gamestate_for_action(action: str) -> GameState:
 def _choose_seed(args, game_state: GameState) -> int:
     """
     Decide on a seed for this run.
+
     Priority:
       1. explicit --seed from CLI
-      2. current day value
-      3. random fallback
+      2. random new seed (every run)
     """
+    # 1. User explicitly sets a seed from command-line
     if args.seed is not None:
         return args.seed
-    if getattr(game_state, "day", None):
-        return game_state.day
+
+    # 2. Always generate a fresh random seed for each run
     return random.randint(0, 10_000_000)
 
+def _choose_maze_size(
+    args,
+    game_state: GameState | None,
+    seed: int | None,
+) -> tuple[int, int]:
+    """
+    Choose a maze size in *cell space*.
+
+    - If the user explicitly passed --width/--height, respect that.
+    - Otherwise pick a random size between 10 and 50 cells (inclusive).
+    """
+
+    MIN_SIZE = 10
+    MAX_SIZE = 50
+
+    # If user explicitly set width/height on the CLI, use those.
+    if args.width is not None and args.height is not None:
+        return args.width, args.height
+
+    # Otherwise, pick random sizes per run.
+    # (If you want reproducible sizes, you *can* seed this with `seed`.)
+    def pick_dim() -> int:
+        n = random.randint(MIN_SIZE, MAX_SIZE)
+        # Optional: keep odd dimensions for nicer mazes
+        if n % 2 == 0:
+            if n == MAX_SIZE:
+                n -= 1
+            else:
+                n += 1
+        return n
+
+    width = pick_dim()
+    height = pick_dim()
+    return width, height
 
 def main() -> None:
     args = parse_args()
+
+    # Initialise logging once for the whole app
+    init_logging(mode="game", log_dir="logs")
+    app_logger = get_logger("app")
+    app_logger.info("Maze Tycoon started (mode=%s)", args.mode)
 
     # DEMO MODE: Just the looping L-walk, no game state, no menu.
     if args.mode == "demo":
@@ -113,6 +154,9 @@ def main() -> None:
 
         seed = _choose_seed(args, game_state)
 
+        # Pick maze size for this run
+        width, height = _choose_maze_size(args, game_state, seed)
+
         # Auto-heuristic if not provided
         heuristic = args.heuristic
         if heuristic is None and args.alg in ("a_star", "bidirectional_a_star"):
@@ -124,8 +168,8 @@ def main() -> None:
             algorithm=args.alg,
             heuristic=heuristic,
             connectivity=args.connectivity,
-            width=args.width,
-            height=args.height,
+            width=width,
+            height=height,
             seed=seed,
             headless=False,
         )
@@ -147,6 +191,9 @@ def main() -> None:
         # Decide on seed for this run
         seed = _choose_seed(args, game_state)
 
+        # Decide on maze size (random 40–60, tied to seed)
+        width, height = _choose_maze_size(args, game_state, seed)
+
         # Auto-heuristic if not provided
         heuristic = args.heuristic
         if heuristic is None and args.alg in ("a_star", "bidirectional_a_star"):
@@ -159,13 +206,12 @@ def main() -> None:
             algorithm=args.alg,
             heuristic=heuristic,
             connectivity=args.connectivity,
-            width=args.width,
-            height=args.height,
+            width=width,
+            height=height,
             seed=seed,
             headless=False,
         )
 
-        # Persist progress so Continue/Load can pick it up next time
         save_game_state(game_state)
 
         # When the maze window closes, the while-loop continues
