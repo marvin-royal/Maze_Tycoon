@@ -28,9 +28,19 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
     pq = [(h(start), 0.0, start)]  # (f, g, node)
     expansions = 0
 
+    visited_order = []
+    closed = set()
+
     while pq:
         f, gcur, (r, c) = heapq.heappop(pq)
+
+        if (r, c) in closed:
+            continue
+        closed.add((r, c))
+
         expansions += 1
+        visited_order.append((r, c))
+        
         if (r, c) == goal:
             break
         for dr, dc in neighbors:
@@ -52,6 +62,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
             "path_length": 0,
             "node_expansions": expansions,
             "runtime_ms": runtime_ms,
+            "visited": list(visited_order)
         }
 
     # Reconstruct path from goal back to start
@@ -69,5 +80,6 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
         "path_length": path_length,
         "node_expansions": expansions,
         "runtime_ms": runtime_ms,
+        "visited": list(visited_order)
     }
 

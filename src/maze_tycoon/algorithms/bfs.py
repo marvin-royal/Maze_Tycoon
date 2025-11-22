@@ -14,9 +14,19 @@ def solve(matrix, start=(1, 1), goal=None, **_):
     parent = {start: None}
     expansions = 0
 
+    visited_order = []
+    closed = set()
+
     while q:
         r, c = q.popleft()
+
+        if (r, c) in closed:
+            continue
+        closed.add((r, c))
+
         expansions += 1
+        visited_order.append((r, c))
+
         if (r, c) == goal:
             break
         for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
@@ -33,6 +43,7 @@ def solve(matrix, start=(1, 1), goal=None, **_):
             "path_length": 0,
             "node_expansions": expansions,
             "runtime_ms": runtime_ms,
+            "visited": list(visited_order),
         }
 
     # Reconstruct path once
@@ -50,4 +61,5 @@ def solve(matrix, start=(1, 1), goal=None, **_):
         "path_length": path_length,
         "node_expansions": expansions,
         "runtime_ms": runtime_ms,
+        "visited": list(visited_order),
     }

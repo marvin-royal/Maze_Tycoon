@@ -28,6 +28,7 @@ def solve(matrix, start=(1, 1), goal=None, connectivity=4, **_):
     dist = {start: 0}
     parent = {start: None}
     visited = set()
+    visited_order = []
     expansions = 0
 
     while pq:
@@ -35,6 +36,7 @@ def solve(matrix, start=(1, 1), goal=None, connectivity=4, **_):
         if (r, c) in visited:
             continue    #pragma: no cover
         visited.add((r, c))
+        visited_order.append((r, c))
 
         if (r, c) == goal:
             break
@@ -58,6 +60,7 @@ def solve(matrix, start=(1, 1), goal=None, connectivity=4, **_):
             "path_length": 0,
             "node_expansions": expansions,
             "runtime_ms": runtime_ms,
+            "visited": visited_order,
         }
 
     # Reconstruct full path
@@ -75,5 +78,6 @@ def solve(matrix, start=(1, 1), goal=None, connectivity=4, **_):
         "path_length": path_length,
         "node_expansions": expansions,
         "runtime_ms": runtime_ms,
+        "visited": visited_order,
     }
 

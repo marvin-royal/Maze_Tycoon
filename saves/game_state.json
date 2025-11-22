@@ -1,6 +1,6 @@
 {
-    "day": 39,
-    "credits": 1709,
+    "day": 52,
+    "credits": 1944,
     "unlocked_solvers": {
         "bfs": true,
         "dijkstra": false,

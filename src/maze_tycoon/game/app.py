@@ -296,7 +296,7 @@ def run_interactive_game() -> None:
 if __name__ == "__main__":
     import json, argparse, os
     p = argparse.ArgumentParser()
-    p.add_argument("--gen", default="dfs_backtracker", choices=list("defs_backtracker prim".split()))
+    p.add_argument("--gen", default="dfs_backtracker", choices=list("dfs_backtracker prim".split()))
     p.add_argument("--alg", default="bfs")
     p.add_argument("--heuristic", default=None)
     p.add_argument("--connectivity", type=int, default=4, choices=[4, 8])

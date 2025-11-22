@@ -1,56 +1,223 @@
-Notes to self - Relevant Commands
+📘 Maze Tycoon — README
+🧩 Overview
 
-🧩 Project Setup / Imports
-# 1️⃣  Set Python path so the src/ folder is visible to imports
-$env:PYTHONPATH = "src"
+Maze Tycoon is an interactive and experimental framework for exploring classical search algorithms inside procedurally generated mazes.
+It combines:
 
-# 2️⃣  Test that imports work
-python -c "import maze_tycoon, sys; print('OK:', maze_tycoon.__file__)"
+Maze generation (DFS Backtracking, Prim’s Algorithm)
 
-🧱 Running Maze Generators
-# 3️⃣  Run the ASCII maze visualizer
-python scripts\show_mazes.py
+Classical pathfinding algorithms (BFS, Dijkstra, A*, Bidirectional A*)
 
-# 4️⃣  (Optional) run as module if you prefer
-python -m scripts.show_mazes
+Real-time visualization using pygame
 
-🧠 Running Experiments (CSV + Pathfinding)
-# 5️⃣  BFS baseline run with ASCII output for first maze of each size
-python scripts\run_experiment.py -c configs\bfs.yml --ascii
+Deterministic experiment pipeline for collecting solver metrics
 
-# 6️⃣  A* Manhattan heuristic (4-connected)
-python scripts\run_experiment.py -c configs\astar_manhattan.yml
+Batch-mode evaluation for research, benchmarking, and plotting
 
-# 7️⃣  A* Octile heuristic (8-connected)
-python scripts\run_experiment.py -c configs\astar_octile.yml
+A persistent tycoon-style progression system
 
-📦 Check Algorithm Modules Exist
-# 8️⃣  Confirm that bfs and a_star modules load and have solve()
-$env:PYTHONPATH = "src"
-python -c "import importlib; print('bfs:', hasattr(importlib.import_module('maze_tycoon.algorithms.bfs'),'solve')); print('a_star:', hasattr(importlib.import_module('maze_tycoon.algorithms.a_star'),'solve'))"
+Maze Tycoon supports both interactive gameplay and headless batch experiments, making it useful for education, AI demonstrations, and algorithmic analysis.
 
-🔍 Debugging Imports or Seeds
-# 10️⃣  Find any hardcoded random seeds (e.g., "random.Random(42)")
-findstr /S /N /I "random.Random(" src\maze_tycoon\generation\*.py
-findstr /S /N /I "np.random.seed" src\maze_tycoon\generation\*.py
+📦 Installation
+1. Clone the repository
+git clone <your-repo-url>
+cd Maze_Tycoon
 
-🗂️ Confirm File Structure (Top 3 Levels)
-# 11️⃣  Show layout to verify src and scripts folders
-tree -a -L 3
+2. Install dependencies
 
-🧼 Reset / Re-run Environment
-# 12️⃣  Clear and recreate outputs folder if needed
-Remove-Item outputs -Recurse -Force
-mkdir outputs
+Python 3.9+ recommended.
 
-Run Python test suite quickly
-python -m pytest -q
+pip install -r requirements.txt
 
-Erase previous coverage file
-python -m coverage erase
 
-Run Coverage report, skip completely covered features, and generate an html report
-python -m pytest -vv --cov=maze_tycoon --cov-report=term-missing:skip-covered --cov-report=html
+Dependencies include:
 
-Print help text for maze_tycoon
-python -m maze_tycoon.game.app --help
+pygame
+
+numpy
+
+pandas
+
+matplotlib
+
+seaborn (optional for extra visuals)
+
+🚀 Running Maze Tycoon
+
+Maze Tycoon supports two main execution modes:
+
+🎮 1. Interactive Gameplay Mode
+
+This mode launches the full UI with menus, algorithm selection, solver animation, and summary screens.
+
+Run:
+
+python -m maze_tycoon.game.app
+
+
+You will see:
+
+Main Menu
+
+Start / Continue / Load / Quit
+
+Maze Generation Selection
+
+DFS Backtracking
+
+Prim’s Algorithm
+
+Algorithm Selection
+
+BFS, Dijkstra, A*, Bidirectional A*
+
+Real-Time Visualization
+
+Post-Run Summary Screen
+
+Path length
+
+Steps
+
+Visited nodes
+
+Credits earned
+
+All progress persists automatically inside the GameState.
+
+📊 2. Batch Experiment Mode (Headless)
+
+This mode runs many trials automatically and logs results to .jsonl for analysis.
+
+Basic example:
+python -m maze_tycoon.game.app --mode batch --alg bfs --gen dfs_backtracker --width 31 --height 31 --trials 50
+
+Common parameters
+Flag	Meaning
+--mode batch	Enables headless batch mode
+--alg	Solver algorithm (bfs, dijkstra, a_star, bidirectional_a_star)
+--gen	Maze generator (dfs_backtracker, prim)
+--width, --height	Maze dimensions
+--trials	Number of trials to run
+--heuristic	For A*: manhattan, euclidean, octile
+--out	Output file override (optional)
+Sample commands (recommended)
+A Euclidean, DFS Backtracking*
+python -m maze_tycoon.game.app --mode batch \
+    --alg a_star --heuristic euclidean \
+    --gen dfs_backtracker \
+    --width 31 --height 31 \
+    --trials 50
+
+Bidirectional A Manhattan, Prim*
+python -m maze_tycoon.game.app --mode batch \
+    --alg bidirectional_a_star --heuristic manhattan \
+    --gen prim \
+    --width 31 --height 31 \
+    --trials 50
+
+
+Results export to:
+
+results/results_<alg>_<heuristic>_<gen>_<HxW>_t<trials>.jsonl
+
+📑 Metrics & Output Files
+
+Every trial logs:
+
+path_length
+
+visited_nodes (full set)
+
+node_expansions
+
+runtime_ms
+
+start/goal positions
+
+path (list of grid coordinates)
+
+visited_order (for heatmaps)
+
+metadata (seed, algorithm, generator, maze size)
+
+Stored in .jsonl for streaming large datasets.
+
+📈 Plotting & Analysis
+
+Inside maze_tycoon/metrics/plotting.py, you will find utilities for:
+
+Path length distributions
+
+Visited-node comparisons
+
+Step-count comparisons
+
+Solver heatmaps
+
+Algorithm ranking tables
+
+Maze Tycoon–styled visual figures
+
+To use them:
+
+python -m maze_tycoon.metrics.plotting
+
+
+Or call individual functions inside the script after configuring:
+
+RESULTS_DIR = "/path/to/results"
+OUT_DIR = "/path/to/output/plots"
+
+
+Generated outputs include .png images placed inside OUT_DIR.
+
+🏗 Project Structure
+maze_tycoon/
+│
+├── algorithms/          # BFS, Dijkstra, A*, Bidirectional A*
+├── generation/          # DFS Backtracking + Prim generators
+├── heuristics/          # Heuristic functions
+├── game/
+│    ├── app.py          # Main entry point (interactive + batch)
+│    ├── ui_pygame.py    # Visualization / rendering
+│    ├── ui_adapter.py   # Data <-> UI interface
+│    ├── state.py        # GameState persistence + economy
+│    └── engine.py       # Simulation engine & run pipelines
+│
+├── metrics/
+│    ├── plotting.py     # Graphs / heatmaps / summaries
+│    └── tables.py       # Rankings + CSV utilities
+│
+├── io/                  # JSONL/CSV serialization tools
+└── results/             # Auto-generated experiment logs
+
+🧪 Reproducibility
+
+Maze Tycoon uses a custom deterministic RNG system:
+
+Every maze, solver, and experiment can be reproduced exactly.
+
+Seeds are stored in each trial’s output record.
+
+🛠 Future Extensions
+
+Ideas already supported by the architecture:
+
+New maze generators (Kruskal, Eller, Wilson’s)
+
+Additional solvers (IDA*, Jump Point Search)
+
+RL-based agents
+
+Upgrade systems / tycoon mechanics
+
+Difficulty scaling across game days
+
+📄 License
+
+(Add your chosen license here — MIT is typical for student projects.)
+
+🎉 Acknowledgments
+
+Maze Tycoon was created as part of a final project for COMP 56600 / 600 — Artificial Intelligence.

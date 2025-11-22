@@ -1,0 +1,5 @@
+algorithm,avg_path,avg_visited,avg_steps,success_rate,rank_path,rank_visited,rank_steps,overall_rank
+dijkstra,218.47,922.25,218.47,100,1.0,2.0,1.0,1.0
+bidirectional_a_star,222.82,1365.34,222.82,300,2.0,4.0,2.0,2.0
+bfs,228.24,1035.99,228.24,100,3.0,3.0,3.0,3.0
+a_star,228.32666666666665,699.9733333333334,228.32666666666665,300,4.0,1.0,4.0,3.0

@@ -46,9 +46,13 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
     visited_f = set()
     visited_b = set()
 
+    visited_order_f = []
+    visited_order_b = []
+
     best_mu = float("inf")  # best path cost found
     meet_node = None
     expansions = 0
+    
 
     while open_f and open_b:
         # Expand the side with smaller top f-score
@@ -59,6 +63,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
             if node in visited_f:
                 continue
             visited_f.add(node)
+            visited_order_f.append(node)
             expansions += 1
 
             # If best possible path via node can't beat best_mu, continue
@@ -86,6 +91,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
             if node in visited_b:
                 continue    #pragma: no cover
             visited_b.add(node)
+            visited_order_b.append(node)
             expansions += 1
 
             if g + h_b(node) >= best_mu:
@@ -134,6 +140,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
                 "path_length": path_length,
                 "node_expansions": expansions,
                 "runtime_ms": runtime_ms,
+                "visited": visited_order_f + visited_order_b
             }
 
         # No connection found
@@ -142,6 +149,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
             "path_length": 0,
             "node_expansions": expansions,
             "runtime_ms": runtime_ms,
+            "visited": visited_order_f + visited_order_b
      }
 
 
@@ -173,6 +181,7 @@ def solve(matrix, start=(1, 1), goal=None, heuristic="manhattan", connectivity=4
         "path_length": path_length,
         "node_expansions": expansions,
         "runtime_ms": runtime_ms,
+        "visited": visited_order_f + visited_order_b
     }
 
 def test_biastar_updates_best_mu_with_multiple_meet_nodes():
