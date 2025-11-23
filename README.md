@@ -52,7 +52,7 @@ This mode launches the full UI with menus, algorithm selection, solver animation
 
 Run:
 
-python -m maze_tycoon.game.app
+python -m maze_tycoon.game.app --mode interactive
 
 
 You will see:
